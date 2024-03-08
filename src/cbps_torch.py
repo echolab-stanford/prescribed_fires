@@ -90,7 +90,7 @@ class CBPS:
         # SVD for dimensionality reduction
         if self.svd is not None:
             X = torch.from_numpy(X).float().to(device)
-            U, S, V = torch.linalg.svd(X)
+            U, S, V = torch.linalg.svd(X, full_matrices=False)
             U_r = U[:, : self.svd]
             S_r = torch.diag(S[: self.svd])
             V_r = V[:, : self.svd].t()
@@ -100,20 +100,22 @@ class CBPS:
         else:
             self.X = torch.from_numpy(X).float().to(device)
 
-        # Store losses when fit is called
-        self.loss = []
-
         if self.intercept:
             self.X = torch.concat((torch.ones((self.n, 1)).to(device), self.X), 1)
+            self.p += 1
 
-        # Parameters theta to be optimized
-        self.theta = torch.randn(self.p + 1, requires_grad=True, device=device)
+        # Initialize theta (parameters to optimize).
+        self.theta = torch.randn(self.p, requires_grad=True, device=device)
+
+        # Store losses when fit is called
+        self.loss = []
+        self.lr_decay = []
 
     def __repr__(self):
         """Representation of the class."""
-        return "Esimating CBPS with PyTorch using {device}"
+        return f"Esimating CBPS with PyTorch using {device}"
 
-    def _covariate_differences(self, metric):
+    def _covariate_differences(self, metric, **kwargs):
         """Calculate standarized differences without weights."""
         try:
             std_diffs_weight = standarized_diffs(
@@ -121,25 +123,26 @@ class CBPS:
                 treat_var=self.treat_var,
                 metric=metric,
                 weights=self.weights(),
+                **kwargs,
             )
             std_diffs_unweight = standarized_diffs(
-                df_vars=self.df, treat_var=self.treat_var, metric=metric
+                df_vars=self.df, treat_var=self.treat_var, metric=metric, **kwargs
             )
-
         except AttributeError:
             std_diffs_weight = standarized_diffs(
                 df_vars=self.X,
                 treat_var=self.W,
                 metric=metric,
                 weights=self.weights(),
+                **kwargs,
             )
             std_diffs_unweight = standarized_diffs(
-                df_vars=self.X, treat_var=self.W, metric=metric
+                df_vars=self.X, treat_var=self.W, metric=metric, **kwargs
             )
 
         return (std_diffs_unweight, std_diffs_weight)
 
-    def diagnose(self, method, ax=None, scatter=False):
+    def diagnose(self, method, ax=None, scatter=False, **kwargs):
         """Plot standarized differences.
 
         Show plot of standarized differences for the balancing covariates to show
@@ -149,6 +152,7 @@ class CBPS:
             method (str): method to calculate standarized differences
             ax (matplotlib.axes, optional): axes to plot. Defaults to None.
             scatter (bool, optional): Scatter plot of unweighted and weighted balance. Defaults to False.
+            **kwargs: additional arguments to pass to the standarized_diffs function.
 
         Returns:
             matplotlib.axes
@@ -157,7 +161,7 @@ class CBPS:
             fig, ax = plt.subplots(figsize=(10, 6))
 
         if not scatter:
-            std_diff_uw, std_diff_w = self._covariate_differences(method)
+            std_diff_uw, std_diff_w = self._covariate_differences(method, **kwargs)
             ax.plot(
                 std_diff_w.std_diffs,
                 std_diff_w.index,
@@ -172,7 +176,7 @@ class CBPS:
             # Add legend to the plot
             ax.legend()
         else:
-            std_diff_uw, std_diff_w = self._covariate_differences("asmd")
+            std_diff_uw, std_diff_w = self._covariate_differences("asmd", **kwargs)
             ax.scatter(
                 x=std_diff_uw.std_diffs,
                 y=std_diff_w.std_diffs,
@@ -180,6 +184,26 @@ class CBPS:
             ax.plot([0, 1], [0, 1], color="red", linestyle="--")
             ax.set_ylabel("Weighted Standardized Differences")
             ax.set_xlabel("Unweighted Standardized Differences")
+        return ax
+
+    def diagnose_loss(self, ax):
+        """Plot loss function for each regularization level."""
+
+        if not ax:
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+        ax.plot(self.loss)
+
+        # Change y-axis to logscale
+        ax.set_yscale("log")
+
+        # Add labels to axis
+        ax.set_ylabel("Loss")
+        ax.set_xlabel("Iterations")
+
+        # Add legend using cbps.reg values and add name
+        plt.legend(self.reg, title="Regularization")
+
         return ax
 
     @staticmethod
@@ -221,7 +245,13 @@ class CBPS:
     @cached_property
     def fit(self):
         """Estimate theta via SGD using target estimand loss function."""
+        # Loop over the list of regularizations
         optimizer = torch.optim.Adam([self.theta], lr=self.lr)
+
+        # Add a learning rate scheduler
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=1000, gamma=0.1
+        )
 
         for iteration in tqdm(range(self.niter), desc="Optimizing CBPS..."):
             optimizer.zero_grad()
@@ -236,7 +266,10 @@ class CBPS:
 
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
+            # Store learning rate and loss
+            self.lr_decay.append(scheduler.get_last_lr()[0])
             self.loss.append(loss.item())
 
             if self.noi and iteration % 100 == 0:
@@ -253,12 +286,13 @@ class CBPS:
             np.array: weights
         """
         weights = self.fit
+
         if self.estimand == "ATT":
             out = torch.exp(self.X @ weights)[self.W == 0]
         elif self.estimand == "ATE":
             out = torch.exp(self.X @ weights)
 
         if numpy:
-            return out.cpu().detach().numpy()
+            out = [o.cpu().detach().numpy() for o in out]
 
         return out
