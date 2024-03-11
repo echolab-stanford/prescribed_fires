@@ -10,7 +10,17 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 def run_balancing(
-    df, focal_year, treat_col, row_id, reg_list, lr_list, metrics, save_path, **kwargs
+    df,
+    focal_year,
+    treat_col,
+    class_col,
+    row_id,
+    reg_list,
+    lr_list,
+    metrics,
+    save_path,
+    intensity_class=1,
+    **kwargs,
 ):
     """Run balancing for a given focal year using CBPS.
 
@@ -36,14 +46,16 @@ def run_balancing(
         lr_list (list): A list with the learning rate parameters to be used
         metrics (str ot list): The method to be used for assess balace in standarized differences
         save_path (str): If True, the function will save the results to a file
+        intesnity_class (int): The intensity/severity class to use to define control
         **kwargs: Other arguments to be passed to the CBPS function
 
     Returns:
         None
     """
 
-    # Select treat column
-    w = df[treat_col].values
+    # Define treatment with treatment column and class column
+    treat_class = (df[treat_col] * df[class_col]).values
+    w = np.where(treat_class >= intensity_class, 1, 0)
 
     # Row id using grid_id
     id_col = df[row_id].values
