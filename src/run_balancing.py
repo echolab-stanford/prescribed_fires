@@ -55,7 +55,7 @@ def run_balancing(
 
     # Define treatment with treatment column and class column
     treat_class = (df[treat_col] * df[class_col]).values
-    w = np.where(treat_class >= intensity_class, 1, 0)
+    w = np.where(treat_class == intensity_class, 1, 0)
 
     # Row id using grid_id
     id_col = df[row_id].values
@@ -80,6 +80,7 @@ def run_balancing(
 
     # Drop some columns that we don't need!
     df = df.drop(columns=[col for col in df.columns if "treat" in col])
+    df = df.drop(columns=[col for col in df.columns if "class" in col])
 
     # Scale data
     X = MinMaxScaler().fit_transform(df.values)
