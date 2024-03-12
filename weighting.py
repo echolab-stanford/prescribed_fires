@@ -1,3 +1,24 @@
+""" Run balancing for a focal year and a specific land type 
+
+This script is a wrapper for the run_balancing function. It prepares the data and runs the balancing for a specific land type.
+
+Land-types are defined as a integer:
+    1: "Agricultural",
+    2: "Conifer",
+    3: "Conifer-Hardwood",
+    4: "Developed",
+    5: "Exotic Herbaceous",
+    6: "Exotic,Tree-Shrub",
+    7: "Grassland",
+    8: "Hardwood",
+    9: "No Data",
+    10: "Non-vegetated",
+    11: "Riparian",
+    12: "Shrubland",
+    13: "Sparsely Vegetated"
+"""
+
+import argparse
 from functools import reduce
 
 import numpy as np
@@ -8,14 +29,11 @@ from sklearn.preprocessing import MinMaxScaler
 from src.run_balancing import run_balancing
 from src.utils import expand_grid
 
-if __name__ == "__main__":
 
-    path = "/oak/stanford/groups/mburke"
+def prepare_data(path_covars, path_template, path_treatments):
 
     # Load template to start merging
-    template = rioxarray.open_rasterio(
-        f"{path}/prescribed_data/geoms/templates/template.tif"
-    )
+    template = rioxarray.open_rasterio(path_template)
 
     # Notice template is 1 for land and 0 for water
     template_df = (
@@ -40,9 +58,10 @@ if __name__ == "__main__":
     )
 
     # Load treatments and MTBS data
-    treatments = pd.read_feather(
-        f"{path}/prescribed_data/processed/treatments_mtbs.feather",
-    ).drop(columns=["spatial_ref"])
+    treatments = pd.read_feather(path_treatments)
+
+    if "spatial_ref" in treatments.columns:
+        treatments.drop(columns=["spatial_ref"], inplace=True)
 
     # Merge with template to clean treatments (they're full of water!)
     treatments = template_expanded.merge(
@@ -59,7 +78,6 @@ if __name__ == "__main__":
     )
 
     ### Merge with output data: intensity and severity with their low types
-
     #### 1. Intensity with the FRP tresholds (Ichoku et al., 2014)
 
     # Merge with FRP data
@@ -68,7 +86,7 @@ if __name__ == "__main__":
     treatments = treatments[treatments.Incid_Type != "Prescribed Fire"]
 
     # Load intensity FRP data
-    frp = pd.read_feather(f"{path}/prescribed_data/processed/frp_concat.feather")
+    frp = pd.read_feather(f"{path_covars}/frp_concat.feather")
     frp["year"] = frp.time.dt.year
     frp_groupped = frp.groupby(["lat", "lon", "year"], as_index=False).frp.max()
 
@@ -95,9 +113,7 @@ if __name__ == "__main__":
     # #### 2. Severity from Landsat and scaling from -1 to 1
 
     # Load intensity FRP data
-    dnbr = pd.read_feather(f"{path}/prescribed_data/processed/dnbr_alt.feather").drop(
-        columns=["band"]
-    )
+    dnbr = pd.read_feather(f"{path_covars}/dnbr_alt.feather").drop(columns=["band"])
 
     # Scale DNBR values
     dnbr_scaled = MinMaxScaler(feature_range=(-1, 1)).fit_transform(
@@ -130,15 +146,14 @@ if __name__ == "__main__":
         values=["treat", "class_dnbr", "class_frp"],
     )
     treats_wide.columns = [f"{col}_{year}" for col, year in treats_wide.columns]
-    treas_wide = treats_wide.reset_index()
-    treats_wide
+    treats_wide = treats_wide.reset_index()
 
     dict_paths = {
-        "prism": f"{path}/prescribed_data/processed/prism.feather",
-        "disturbances": f"{path}/prescribed_data/processed/disturbances.feather",
-        "dem": f"{path}/prescribed_data/processed/dem.feather",
-        "frp": f"{path}/prescribed_data/processed/frp_wide.feather",
-        "land_type": f"{path}/prescribed_data/processed/land_type.feather",
+        "prism": f"{path_covars}/prism.feather",
+        "disturbances": f"{path_covars}/disturbances.feather",
+        "dem": f"{path_covars}/dem.feather",
+        "frp": f"{path_covars}/frp_wide.feather",
+        "land_type": f"{path_covars}/land_type.feather",
     }
 
     # Load datasets and merge with template
@@ -159,16 +174,38 @@ if __name__ == "__main__":
     # Save some memory
     del data
 
+    return df
+
+
+if __name__ == "__main__":
+
+    # Add command-line options from argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path_covars", type=str, required=True)
+    parser.add_argument("--path_template", type=str, required=True)
+    parser.add_argument("--path_treatments", type=str, required=True)
+    parser.add_argument("--focal_year", type=int, default=2019)
+    parser.add_argument("--land_type", type=int, default=2)
+    args = parser.parse_args()
+
+    # Prepare data
+    df = prepare_data(
+        path_covars=args.path_covars,
+        path_template=args.path_template,
+        path_treatments=args.path_treatments,
+    )
+
+    # Run balancing
     run_balancing(
-        df=df[df.land_type.isin([2])].dropna(),
-        focal_year=2019,
-        treat_col="treat_2019",
-        class_col="class_frp_2019",
+        df=df[df.land_type.isin([args.land_type])].dropna(),
+        focal_year=args.focal_year,
+        treat_col=f"treat_{args.focal_year}",
+        class_col=f"class_frp_{args.focal_year}",
         row_id="grid_id",
         reg_list=[0, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0, 1],
         lr_list=[1, 0.1, 1e-2, 1e-3, 1e-4, 1e-5],
         intercept=True,
         niter=10_000,
         metrics=["smd", "asmd"],
-        save_path=f"./results"
+        save_path="./results",
     )
