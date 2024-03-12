@@ -166,9 +166,9 @@ if __name__ == "__main__":
         class_col="class_frp_2019",
         row_id="grid_id",
         reg_list=[0, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 0, 1],
-        lr_list=[1, 5e-2, 5e-3, 5e-4, 5e-5],
+        lr_list=[1, 0.1, 1e-2, 1e-3, 1e-4, 1e-5],
         intercept=True,
         niter=10_000,
         metrics=["smd", "asmd"],
-        save_path="{path}/prescribed_data/processed/balancing_results",
+        save_path=f"./results"
     )
