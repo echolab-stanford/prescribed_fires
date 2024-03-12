@@ -1,4 +1,4 @@
-""" Run balancing for a focal year and a specific land type 
+"""Run balancing for a focal year and a specific land type
 
 This script is a wrapper for the run_balancing function. It prepares the data and runs the balancing for a specific land type.
 
@@ -31,7 +31,6 @@ from src.utils import expand_grid
 
 
 def prepare_data(path_covars, path_template, path_treatments):
-
     # Load template to start merging
     template = rioxarray.open_rasterio(path_template)
 
@@ -178,12 +177,12 @@ def prepare_data(path_covars, path_template, path_treatments):
 
 
 if __name__ == "__main__":
-
     # Add command-line options from argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--path_covars", type=str, required=True)
     parser.add_argument("--path_template", type=str, required=True)
     parser.add_argument("--path_treatments", type=str, required=True)
+    parser.add_argument("--save_path", type=str, default="./results")
     parser.add_argument("--focal_year", type=int, default=2019)
     parser.add_argument("--land_type", type=int, default=2)
     args = parser.parse_args()
@@ -207,5 +206,5 @@ if __name__ == "__main__":
         intercept=True,
         niter=10_000,
         metrics=["smd", "asmd"],
-        save_path="./results",
+        save_path=args.save_path,
     )
