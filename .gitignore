@@ -1,3 +1,13 @@
+# Data of any kinds
+*.csv
+*.png
+*.jpeg
+*.nc4
+*.nc
+*.pdf
+*.svg
+*.tif
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
