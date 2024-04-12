@@ -111,7 +111,9 @@ def process_dem(dem_path, shape_mask, template, save_path, feather=False):
                 .first()
                 .reset_index()
             )
-            merge_arr = merge_arr.merge(on=["lat", "lon"]).drop(columns=["year"])
+            merge_arr = merge_arr.merge(template, on=["lat", "lon"]).drop(
+                columns=["year"]
+            )
             merge_arr.to_feather(os.path.join(save_path, "dem.feather"))
 
         else:

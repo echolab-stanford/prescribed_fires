@@ -22,6 +22,7 @@ def process_disturbances(
     shape_mask=None,
     clean=False,
     feather=False,
+    wide=False,
 ):
     """Process disturbances data for California.
 
@@ -55,6 +56,8 @@ def process_disturbances(
         If True, the function will remove the temporary directory and the mosaic file.
     feather: bool
         If True, save the data a unique feather, by default False
+    wide: bool
+        If True, save the data in a wide format, by default False. Notice that this can only work if feather is `True` as well.
 
     Returns
     -------
@@ -214,7 +217,7 @@ def process_disturbances(
             # Template to expand the data
             template_expanded = prepare_template(template_path)
 
-            disturbances = arr.to_dataarray().squeeze().drop_vars("variable")
+            disturbances = arr.squeeze()
 
             dist_df = (
                 disturbances.to_dataframe(name="disturbances").reset_index().dropna()
@@ -241,21 +244,28 @@ def process_disturbances(
 
             # Create dummies in the long format and then make it wider
             dist_df_dummies = pd.get_dummies(dist_df, columns=["disturbances"])
-            dist_pivot = pd.pivot(
-                dist_df_dummies,
-                index="grid_id",
-                columns="year",
-                values=[
-                    col for col in dist_df_dummies.columns if "disturbances" in col
-                ],
-            ).astype(int)
+            dist_df_dummies.to_feather(
+                os.path.join(save_path, "disturbances_long.feather")
+            )
 
-            # Change column names from multiindex to flat
-            dist_pivot.columns = [f"{i}_{j}" for i, j in dist_pivot.columns]
-            dist_pivot.reset_index(inplace=True)
+            if wide:
+                dist_pivot = pd.pivot(
+                    dist_df_dummies,
+                    index="grid_id",
+                    columns="year",
+                    values=[
+                        col for col in dist_df_dummies.columns if "disturbances" in col
+                    ],
+                ).astype(int)
 
-            # Save data to feather
-            dist_pivot.to_feather(os.path.join(save_path, "disturbances.feather"))
+                # Change column names from multiindex to flat
+                dist_pivot.columns = [f"{i}_{j}" for i, j in dist_pivot.columns]
+                dist_pivot.reset_index(inplace=True)
+
+                # Save data to feather
+                dist_pivot.to_feather(
+                    os.path.join(save_path, "disturbances_wide.feather")
+                )
 
         # Save data
         arr.to_netcdf(os.path.join(save_path, "disturbances.nc"))

@@ -76,7 +76,7 @@ def process_prism(path_to_zip, mask_shape, save_path=None, template=None):
             # Change nasty -9999 values to NaN
             data_src = np.where(data_src == -9999, np.nan, data_src)
 
-            if template:
+            if template is not None:
                 # Reproject data to match template bounds and width/height
                 # Open template
                 with rasterio.open(template) as temp:
@@ -117,7 +117,7 @@ def process_prism(path_to_zip, mask_shape, save_path=None, template=None):
 
 
 def process_variables(
-    variables, path_prism_data, save_path, template, feather=False, wide=False, **kwargs
+    variables, path_prism_data, save_path, feather=False, wide=False, **kwargs
 ):
     """Process all PRISM variables and save as NetCDF files
 
@@ -175,7 +175,11 @@ def process_variables(
         print("Processing PRISM as a long feather file...")
 
         # Load template line
-        template = prepare_template(template).groupby("grid_id", as_index=False).first()
+        template = (
+            prepare_template(kwargs["template"])
+            .groupby("grid_id", as_index=False)
+            .first()
+        )
 
         prism_data = [
             xr.open_dataset(

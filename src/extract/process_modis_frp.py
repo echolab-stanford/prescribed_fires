@@ -1,4 +1,5 @@
 import os
+import logging
 import pandas as pd
 import geopandas as gpd
 import xarray as xr
@@ -9,8 +10,12 @@ from geocube.api.core import make_geocube
 
 from src.utils import prepare_template
 
+log = logging.getLogger(__name__)
 
-def process_modis_file(file_path, save_path, aoi, template, feather=False, wide=False):
+
+def process_modis_file(
+    file_path, save_path, aoi, template_path, feather=False, wide=False
+):
     """Process MODIS file from FIRMS and transform into array format
 
     This function takes a CSV file from FIRMS and transforms it into an xarray
@@ -27,7 +32,7 @@ def process_modis_file(file_path, save_path, aoi, template, feather=False, wide=
         Path to save the resulting output
     aoi : str
         Path to the crosswalk file (shapefile)
-    template : str
+    template_path : str
         Path to the template file to reproject to
     feather : bool
         If True, save all data as a single feather file in long format, unless wide is True. In that case it will save both file in feather format.
@@ -55,7 +60,7 @@ def process_modis_file(file_path, save_path, aoi, template, feather=False, wide=
     )
 
     # Read the template file with xarray
-    template = xr.open_dataarray(template)
+    template = xr.open_dataarray(template_path)
 
     # Transform things to meters CA to avoid problems
     df_points_proj = df_points.to_crs(aoi.crs.to_epsg())
@@ -102,7 +107,7 @@ def process_modis_file(file_path, save_path, aoi, template, feather=False, wide=
 
     # Save feather files if needed
     # Open template file
-    template_expanded = prepare_template(template)
+    template_expanded = prepare_template(template_path)
 
     if feather:
         concat_data = pd.concat(feather_files)
@@ -138,9 +143,11 @@ def process_modis_file(file_path, save_path, aoi, template, feather=False, wide=
             wide_frp.columns = [f"{col}_{idx}" for col, idx in wide_frp.columns]
             wide_frp = wide_frp.reset_index()
 
+            log.info("Saving PRISM in wide format")
             wide_frp.to_feather(os.path.join(save_path, "frp_wide.feather"))
 
     # Save to feather
+    log.info("Saving PRISM in long format")
     concat_data.to_feather(os.path.join(save_path, "frp_concat.feather"))
 
     return None
