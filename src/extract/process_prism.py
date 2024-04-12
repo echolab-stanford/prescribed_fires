@@ -1,16 +1,18 @@
 import os
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import rasterio
 import rasterio.mask
 import xarray as xr
 from rasterio.warp import Resampling, reproject
 from tqdm import tqdm
 
-from .transform_array import transform_array_to_xarray
+from src.utils import prepare_template, transform_array_to_xarray
 
 
 def process_prism(path_to_zip, mask_shape, save_path=None, template=None):
@@ -112,3 +114,101 @@ def process_prism(path_to_zip, mask_shape, save_path=None, template=None):
             data_concat.to_netcdf(f"save_path/prism_processed_{date}.nc")
 
     return data_concat
+
+
+def process_variables(
+    variables, path_prism_data, save_path, template, feather=False, wide=False, **kwargs
+):
+    """Process all PRISM variables and save as NetCDF files
+
+    Notice that if wide is `True`, the function will save the data in both wide and long formats.
+
+    Parameters
+    ----------
+    variables : list
+        List with the variables to process
+    path_prism_data : str
+        Path to the PRISM data
+    save_path : str
+        Path to save the processed data to. The function will create a folder
+        with the year and month and save the NetCDF file there.
+    template : str
+        Path to template data. This is used in this code to add a `grid_id` variable to the output feather files. Is not used for resampling.
+    feather: bool
+        If True, the function will save the data as feather files instead of NetCDF
+    wide: bool
+        If True, the function will save the data as a wide format. If wide is True, then both feather and NetCDF files will be saved.
+    **kwargs : dict
+        Extra arguments to pass to the process_prism function
+
+    Returns
+    -------
+        None. Saves NetCDF files with the processed data
+    """
+
+    data_prism = list(Path(path_prism_data).rglob("*.zip"))
+    filter_data_prism = [f for f in data_prism if "all" in f.name]
+
+    for var in tqdm(variables, position=0, desc="Processing PRISM variables..."):
+        filter_var_prism = [f for f in filter_data_prism if var in f.name]
+
+        yearly_var_data = []
+        for f in filter_var_prism:
+            data = process_prism(
+                path_to_zip=f,
+                **kwargs,
+            )
+            yearly_var_data.append(data)
+
+        # Concat data
+        data_concat = (
+            xr.concat(yearly_var_data, dim="time").sortby("time").to_dataset(name=var)
+        )
+
+        # Save data
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        data_concat.to_netcdf(os.path.join(save_path, f"prism_processed_{var}.nc"))
+
+    if feather:
+        print("Processing PRISM as a long feather file...")
+
+        # Load template line
+        template = prepare_template(template).groupby("grid_id", as_index=False).first()
+
+        prism_data = [
+            xr.open_dataset(
+                os.path.join(save_path, f"prism_processed_{var}.nc"),
+                chunks={"time": 10},
+            )
+            for var in variables
+        ]
+        prism_all = xr.merge(prism_data)
+
+        df_prism = prism_all.to_dataframe().reset_index().dropna()
+        df_prism = df_prism.assign(
+            year=df_prism["time"].dt.year, month=df_prism["time"].dt.month
+        )
+
+        df_prism = df_prism.merge(
+            template[["grid_id", "lat", "lon"]], on=["lat", "lon"], how="inner"
+        )
+        df_prism.to_feather(os.path.join(save_path, "prism_processed_long.feather"))
+
+        if wide:
+            print("Processing PRISM as a wide feather file...")
+            df_prism.drop(columns=["year", "month"], inplace=True)
+            df_prism = pd.pivot(
+                df_prism,
+                index=["lat", "lon", "grid_id"],
+                columns="time",
+                values=["tmin", "tmax", "tdmean", "vpdmin", "vpdmax", "ppt", "tmean"],
+            )
+            df_prism.columns = [
+                f"{i}_{j.strftime('%Y_%m')}" for i, j in df_prism.columns
+            ]
+            df_prism.reset_index(inplace=True)
+            df_prism.to_feather(os.path.join(save_path, "prism_processed_wide.feather"))
+
+    return None

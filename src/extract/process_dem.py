@@ -4,13 +4,14 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import rasterio.mask
+import xarray as xr
 from rasterio.warp import Resampling, reproject
 from xrspatial import aspect, curvature, slope
 
-from .transform_array import transform_array_to_xarray
+from src.utils import transform_array_to_xarray, prepare_template
 
 
-def process_dem(dem_path, shape_mask, template, save_path):
+def process_dem(dem_path, shape_mask, template, save_path, feather=False):
     """Process DEM to calculate aspect, slope and curvature of the terrain
 
     This function takes a DEM of any resolution and calculates the aspect, slope
@@ -29,6 +30,8 @@ def process_dem(dem_path, shape_mask, template, save_path):
     save_path : str
         Path to save the processed data to. The function will create a folder
         with the year and month and save the NetCDF file there.
+    feather : bool, optional
+        If True, save the data as feather files, by default False
 
     Returns
     -------
@@ -96,12 +99,28 @@ def process_dem(dem_path, shape_mask, template, save_path):
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        # Save data
-        aspect_arr.to_netcdf(os.path.join(save_path, "dem_aspect.nc"))
-        slope_arr.to_netcdf(os.path.join(save_path, "dem_slope.nc"))
-        curvature_arr.to_netcdf(os.path.join(save_path, "dem_curvature.nc"))
-        elevation.to_netcdf(os.path.join(save_path, "dem_elevation.nc"))
+        if feather:
+            # Merge all files since they all have the same affine transform
+            merge_arr = xr.merge(out)
+            merge_arr = merge_arr.to_dataframe().reset_index().dropna()
 
-        out = None
+            # Get template clean and merge with data
+            template = (
+                prepare_template(template)
+                .groupby("grid_id", as_index=False)
+                .first()
+                .reset_index()
+            )
+            merge_arr = merge_arr.merge(on=["lat", "lon"]).drop(columns=["year"])
+            merge_arr.to_feather(os.path.join(save_path, "dem.feather"))
+
+        else:
+            # Save data
+            aspect_arr.to_netcdf(os.path.join(save_path, "dem_aspect.nc"))
+            slope_arr.to_netcdf(os.path.join(save_path, "dem_slope.nc"))
+            curvature_arr.to_netcdf(os.path.join(save_path, "dem_curvature.nc"))
+            elevation.to_netcdf(os.path.join(save_path, "dem_elevation.nc"))
+
+            out = None
 
     return out

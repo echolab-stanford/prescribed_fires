@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
+import pandas as pd
 import geopandas as gpd
 import numpy as np
 import rasterio
@@ -10,7 +11,7 @@ from rasterio.merge import merge
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from tqdm import tqdm
 
-from .transform_array import transform_array_to_xarray
+from src.utils import transform_array_to_xarray, prepare_template
 
 
 def process_disturbances(
@@ -20,6 +21,7 @@ def process_disturbances(
     temporary_path="temp",
     shape_mask=None,
     clean=False,
+    feather=False,
 ):
     """Process disturbances data for California.
 
@@ -51,10 +53,12 @@ def process_disturbances(
         Califonia, so masking is recommended.
     clean : bool
         If True, the function will remove the temporary directory and the mosaic file.
+    feather: bool
+        If True, save the data a unique feather, by default False
 
     Returns
     -------
-    xarray.DataArray
+    xarray.DataArray or None
         An xarray with the processed data
     """
 
@@ -205,6 +209,53 @@ def process_disturbances(
     if save_path:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
+
+        if feather:
+            # Template to expand the data
+            template_expanded = prepare_template(template_path)
+
+            disturbances = arr.to_dataarray().squeeze().drop_vars("variable")
+
+            dist_df = (
+                disturbances.to_dataframe(name="disturbances").reset_index().dropna()
+            )
+
+            # Merge with template
+            dist_df.rename(columns={"time": "year"}, inplace=True)
+            dist_df = dist_df.merge(
+                template_expanded, on=["lat", "lon", "year"], how="right"
+            )
+            dist_df.fillna(0, inplace=True)
+
+            # Replace disturbance values for the actual disturbance names
+            dist_df.disturbances = dist_df.disturbances.replace(
+                {
+                    0: "no_disturbance",
+                    1: "fire",
+                    2: "timber_harvest",
+                    3: "drought_forest_die",
+                    4: "unattributed_greening",
+                    5: "unattributed_browning",
+                }
+            )
+
+            # Create dummies in the long format and then make it wider
+            dist_df_dummies = pd.get_dummies(dist_df, columns=["disturbances"])
+            dist_pivot = pd.pivot(
+                dist_df_dummies,
+                index="grid_id",
+                columns="year",
+                values=[
+                    col for col in dist_df_dummies.columns if "disturbances" in col
+                ],
+            ).astype(int)
+
+            # Change column names from multiindex to flat
+            dist_pivot.columns = [f"{i}_{j}" for i, j in dist_pivot.columns]
+            dist_pivot.reset_index(inplace=True)
+
+            # Save data to feather
+            dist_pivot.to_feather(os.path.join(save_path, "disturbances.feather"))
 
         # Save data
         arr.to_netcdf(os.path.join(save_path, "disturbances.nc"))
