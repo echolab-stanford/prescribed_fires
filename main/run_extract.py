@@ -31,112 +31,76 @@ Data will be saved in the following directory structure:
             - dnbr (files per event) in GeoTIFF format
 """
 
-import argparse
 import os
 
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 from src.extract.process_dem import process_dem
 from src.extract.process_disturbances import process_disturbances
-from src.extract.process_prism import process_variables
-from src.extract.process_modis_frp import process_modis_file
 from src.extract.process_dnbr import process_dnbr
+from src.extract.process_modis_frp import process_modis_file
+from src.extract.process_prism import process_variables
 
-if __name__ == "__main__":
-    # Define the parser
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--template",
-        type=str,
-        help="Path to the template file to reproject to",
-        required=True,
-    )
-    parser.add_argument(
-        "--shapefile",
-        type=str,
-        help="Path to the shapefile to use for masking",
-        required=True,
-    )
-    parser.add_argument(
-        "--save_path",
-        type=str,
-        help="Path to save the processed data to",
-        required=True,
-    )
-    parser.add_argument(
-        "--path_to_dem", type=str, help="Path to the DEM data to process", default=None
-    )
-    parser.add_argument(
-        "--path_to_disturbances",
-        type=str,
-        help="Path to the disturbances data to process",
-        default=None,
-    )
-    parser.add_argument(
-        "--path_to_prism",
-        type=str,
-        help="Path to the PRISM data to process",
-        default=None,
-    )
-    parser.add_argument(
-        "--path_to_modis",
-        type=str,
-        help="Path to the MODIS data to process",
-        default=None,
-    )
-    parser.add_argument(
-        "--path_to_dnbr",
-        type=str,
-        help="Path to the DNBR data to process",
-        default=None,
-    )
 
-    # Parse the arguments
-    args = parser.parse_args()
+@hydra.main(config_path="conf", config_name="extract")
+def main(cfg: DictConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
 
     # Process the DEM
-    if args.path_to_dem is not None:
+    if cfg.path_to_dem is not None:
         process_dem(
-            dem_path=args.path_to_dem,
-            shape_mask=args.shapefile,
-            template=args.template,
-            save_path=os.path.join(args.save_path, "dem"),
+            dem_path=cfg.path_to_dem,
+            shape_mask=cfg.shapefile,
+            template=cfg.template,
+            save_path=os.path.join(cfg.save_path, "dem"),
+            feather=cfg.feather,
         )
 
     # Process the disturbances
-    if args.path_to_disturbances is not None:
+    if cfg.path_to_disturbances is not None:
         process_disturbances(
-            disturbances_path=args.path_to_disturbances,
-            template_path=args.template,
-            save_path=os.path.join(args.save_path, "disturbances"),
-            shape_mask=args.shapefile,
+            disturbances_path=cfg.path_to_disturbances,
+            template_path=cfg.template,
+            save_path=os.path.join(cfg.save_path, "disturbances"),
+            shape_mask=cfg.shapefile,
             clean=True,
+            feather=cfg.feather,
+            wide=cfg.wide,
         )
 
     # Process the PRISM data
-    if args.path_to_prism is not None:
+    if cfg.path_to_prism is not None:
         process_variables(
             variables=["tmin", "tmax", "tdmean", "vpdmin", "vpdmax", "ppt", "tmean"],
-            path_prism_data=args.path_to_prism,
-            save_path=os.path.join(args.save_path, "prism"),
-            mask_shape=args.shapefile,
-            template=args.template,
+            path_prism_data=cfg.path_to_prism,
+            save_path=os.path.join(cfg.save_path, "prism"),
+            mask_shape=cfg.shapefile,
+            template=cfg.template,
+            feather=cfg.feather,
+            wide=cfg.wide,
         )
 
     # Process the MODIS data
-    if args.path_to_modis is not None:
+    if cfg.path_to_modis is not None:
         process_modis_file(
-            file_path=args.path_to_modis,
-            save_path=os.path.join(args.save_path, "frp"),
-            aoi=args.shapefile,
-            template=args.template,
+            file_path=cfg.path_to_modis,
+            save_path=os.path.join(cfg.save_path, "frp"),
+            aoi=cfg.shapefile,
+            template=cfg.template,
+            feather=cfg.feather,
+            wide=cfg.wide,
         )
 
     # Process the DNBR data
-    if args.path_to_dnbr is not None:
+    if cfg.path_to_dnbr is not None:
         process_dnbr(
-            dnbr_path=args.path_to_dnbr,
-            template_path=args.template,
-            save_path=os.path.join(args.save_path, "dnbr_template"),
+            dnbr_path=cfg.path_to_dnbr,
+            template_path=cfg.template,
+            save_path=os.path.join(cfg.save_path, "dnbr_template"),
+            feather=cfg.feather,
         )
+
+
+if __name__ == "__main__":
+    main()
