@@ -1,0 +1,14 @@
+root_path: "/mnt/sherlock/oak/prescribed_data"
+save_path: "${root_path}/processed"
+data_path: "${root_path}/raw"
+template: "${root_path}/geoms/templates/template.tif"
+
+build:
+  template: "${template}"
+  treatments_path: "${save_path}/treatments_mtbs.feather"
+  query: "Incid_Type != 'Prescribed Fire'"
+  staggered: true
+  min_count_treatments: 2
+  verbose: false
+
+  
