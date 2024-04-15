@@ -1,12 +1,17 @@
 import os
 import re
 from itertools import product
+import sqlite3
+import logging
 
 import numpy as np
 import pandas as pd
 import torch
 from .cbps_torch import CBPS
 from sklearn.preprocessing import MinMaxScaler
+from ..utils import generate_run_id
+
+log = logging.getLogger(__name__)
 
 
 def run_balancing(
@@ -53,6 +58,9 @@ def run_balancing(
         None
     """
 
+    # Start db connection to store data
+    conn = sqlite3.connect(save_path)
+
     # Define treatment with treatment column and class column
     treat_class = (df[treat_col] * df[class_col]).values
     w = np.where(treat_class == intensity_class, 1, 0)
@@ -87,15 +95,21 @@ def run_balancing(
 
     # Run CBPS for all combinations of regularization and learning rate
     for reg, lr in product(reg_list, lr_list):
+        # Generate hash id for model run
+        run_id = generate_run_id([reg, lr])
+
+        # Run balancing
         cbps = CBPS(X=X, W=w, estimand="ATT", reg=reg, lr=lr, **kwargs)
         weights = cbps.weights(numpy=True)
 
         # Save results as a dataframe
         df_results = pd.DataFrame(weights)
-        df_results.columns = [f"weights_{cbps.reg}_{cbps.lr}"]
-
-        # Add row id
-        df_results[row_id] = id_col
+        df_results = df_results.assign(
+            reg=reg,
+            lr=lr,
+            row_id=id_col,
+            model_run_id=run_id,
+        )
 
         # Save standarized differences for all metrics
         list_metrics = []
@@ -110,6 +124,12 @@ def run_balancing(
 
         # Merge all metrics and add covariate name
         std_diffs_df = pd.concat(list_metrics, axis=1)
+        std_diffs_df = std_diffs_df.assign(
+            reg=reg,
+            lr=lr,
+            row_id=id_col,
+            model_run_id=run_id,
+        )
 
         # If cbps has an intercept, at it to the column name
         if cbps.intercept:
@@ -120,20 +140,22 @@ def run_balancing(
 
         # Save loss to a dataframe
         df_loss = pd.DataFrame(
-            {"loss": cbps.loss, "lr": np.array(cbps.lr_decay), "iter": cbps.niter}
+            {"loss": cbps.loss, "lr_decay": np.array(cbps.lr_decay), "iter": cbps.niter}
+        )
+        df_loss = df_loss.assign(
+            reg=reg,
+            lr=lr,
+            row_id=id_col,
+            model_run_id=run_id,
         )
 
         if save_path:
             if not os.path.exists(save_path):
-                os.makedirs(save_path)
+                log.info(f"Creating SQLite database in: {save_path}")
 
-            df_results.to_feather(
-                f"{save_path}/weights_{focal_year}_{lr}_{reg}.feather"
-            )
-            std_diffs_df.to_feather(
-                f"{save_path}/std_diffs_{focal_year}_{lr}_{reg}.feather"
-            )
-            df_loss.to_feather(f"{save_path}/loss_{focal_year}_{lr}_{reg}.feather")
+            df_results.to_sql("results", conn, if_exists="append", index=False)
+            std_diffs_df.to_sql("std_diffs", conn, if_exists="append", index=False)
+            df_loss.to_feather("loss", conn, if_exists="append", index=False)
 
         # Clean memory
         del cbps, weights, df_results, std_diffs_df

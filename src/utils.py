@@ -1,8 +1,10 @@
+import hashlib
+
 import numpy as np
 import pandas as pd
 import rasterio
-import xarray as xr
 import rioxarray
+import xarray as xr
 
 
 def expand_grid(dict_vars):
@@ -128,3 +130,10 @@ def prepare_template(template_path, years=[2000, 2023]):
     )
 
     return template_expanded
+
+
+def generate_run_id(parameters):
+    """Generate a unique run id from the parameters"""
+    params_string = str(parameters)
+
+    return hashlib.md5(params_string.encode()).hexdigest()
