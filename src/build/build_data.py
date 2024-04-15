@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import rioxarray
 from .report import report_treatments
 from sklearn.preprocessing import StandardScaler
 
@@ -8,14 +7,14 @@ from ..utils import prepare_template
 
 
 def fill_treatment_template(
-    template_path,
-    treatments_path,
-    staggered=True,
-    query=None,
-    verbose=False,
-    min_count_treatments=2,
+    template_path: str,
+    treatments_path: str,
+    query: str,
+    staggered: bool = True,
+    verbose: bool = False,
+    min_count_treatments: int = 2,
     **kwargs,
-):
+) -> pd.DataFrame:
     """Aux function to merge template with MTBS-like treatment data in feather format
 
     This function takes a template raster and a feather file with treatments and
@@ -112,7 +111,9 @@ def fill_treatment_template(
     return treatments
 
 
-def build_lhs(template_path, covariates_dict, **kwargs):
+def build_lhs(
+    template_path: str, covariates_dict: dict[str, str], **kwargs
+) -> pd.DataFrame:
     """Aux function to build the LHS of the design matrix
 
     Our regressions need DVs! This function uses the template to build the DV and
@@ -143,7 +144,7 @@ def build_lhs(template_path, covariates_dict, **kwargs):
         )
 
     # Load covariates
-    covariates = {
+    covariates: dict[str, pd.DataFrame] = {
         key: pd.read_feather(value).drop(columns=["spatial_ref"], errors="ignore")
         for key, value in covariates_dict.items()
     }
@@ -172,7 +173,7 @@ def build_lhs(template_path, covariates_dict, **kwargs):
         elif key == "dnbr":
             # Scale dnbr to -1 and 1
             data["dnbr"] = StandardScaler().fit_transform(
-                data.dnbr.values.reshape(-1, 1)
+                data["dnbr"].values.reshape(-1, 1)
             )
 
             # Find the DNBR class from the earliest fire per each grid using the
@@ -191,4 +192,62 @@ def build_lhs(template_path, covariates_dict, **kwargs):
             data["class_dnbr"] = np.select(conditions, choices, default=np.nan)
             covariates[key] = data
 
+        else:
+            raise KeyError(f"Key {key} not found in datasets")
+
     return covariates
+
+
+def treatment_schedule(
+    treatment_template: pd.DataFrame, treatment_fire: dict, save_path: str
+) -> pd.DataFrame:
+    """Create treatment dataframe organized by year and grid_id
+
+    This function combines treatment data from an MTBS-like dataset and combines
+    it with severity and intensity data to create a treatment schedule based on
+    severity and intensity classes rather than in fire ocurrance. This function
+    will also pivot the data to return a wide-format dataset that can be merged
+    with wide-like covariates and used in synthtetic control balancing.
+
+    Importantly, the treatments are going to be organized along columns to have
+    a direct definition of focal years, which are the years of treatment assignment
+    in the original dataset under conditions defined by the user.
+
+    Args:
+    ----
+    treatment_template (pd.DataFrame): DataFrame with the template filled with
+        treatments and additional columns:
+            - grid_id: Unique identifier for each pixel
+            - year: Year of the observation
+            - lat: Latitude of the pixel
+            - lon: Longitude of the pixel
+            - min_treat_year: First year of treatment for each pixel
+            - rel_year: Relative year since the first treatment
+    treatment_fire (dict): A dictionary with different treatment allocations based
+    on severity and intensity classes.
+
+    Returns:
+    -------
+    pd.DataFrame: DataFrame with the treatment schedule organized by year and
+    grid_id in wide format.
+    """
+
+    # Merge treatments and fire data
+    for key, value in treatment_fire.items():
+        treatment_template = treatment_template.merge(
+            value,
+            on=["grid_id", "year"],
+            how="left",
+        )
+
+    # Pivot data to wide format
+    treats_wide = pd.pivot(
+        treatment_template,
+        index="grid_id",
+        columns="year",
+        values=["treat", "class_dnbr", "class_frp"],
+    )
+    treats_wide.columns = [f"{col}_{year}" for col, year in treats_wide.columns]
+    treats_wide = treats_wide.reset_index()
+
+    return treats_wide

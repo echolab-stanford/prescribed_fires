@@ -3,7 +3,7 @@ import re
 from itertools import product
 import sqlite3
 import logging
-
+from typing import List, Union
 import numpy as np
 import pandas as pd
 import torch
@@ -15,18 +15,18 @@ log = logging.getLogger(__name__)
 
 
 def run_balancing(
-    df,
-    focal_year,
-    treat_col,
-    class_col,
-    row_id,
-    reg_list,
-    lr_list,
-    metrics,
-    save_path,
-    intensity_class=1,
+    df: pd.DataFrame,
+    focal_year: int,
+    treat_col: str,
+    class_col: str,
+    row_id: str,
+    reg_list: list,
+    lr_list: list,
+    metrics: Union[str, List[str]],
+    save_path: str,
+    intensity_class: int = 1,
     **kwargs,
-):
+) -> None:
     """Run balancing for a given focal year using CBPS.
 
     This function run the CBPS balancing algorithm for a given focal year and
@@ -109,6 +109,7 @@ def run_balancing(
             lr=lr,
             row_id=id_col,
             model_run_id=run_id,
+            focal_year=focal_year,
         )
 
         # Save standarized differences for all metrics
@@ -129,6 +130,7 @@ def run_balancing(
             lr=lr,
             row_id=id_col,
             model_run_id=run_id,
+            focal_year=focal_year,
         )
 
         # If cbps has an intercept, at it to the column name
@@ -147,6 +149,7 @@ def run_balancing(
             lr=lr,
             row_id=id_col,
             model_run_id=run_id,
+            focal_year=focal_year,
         )
 
         if save_path:
@@ -155,7 +158,7 @@ def run_balancing(
 
             df_results.to_sql("results", conn, if_exists="append", index=False)
             std_diffs_df.to_sql("std_diffs", conn, if_exists="append", index=False)
-            df_loss.to_feather("loss", conn, if_exists="append", index=False)
+            df_loss.to_sql("loss", conn, if_exists="append", index=False)
 
         # Clean memory
         del cbps, weights, df_results, std_diffs_df

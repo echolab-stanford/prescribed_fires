@@ -24,7 +24,7 @@ extract:
     feather: true
     wide: true
   dnbr:
-    path: "${data_path}/processed/dnbr_landsat_c2_l2_buf"
+    path: "${root_path}/processed/dnbr_landsat_c2_l2_buf"
     save_path: "${save_path}/dnbr"
     feather: true
   disturbances:

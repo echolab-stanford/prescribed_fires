@@ -1,10 +1,8 @@
 import os
 from pathlib import Path
 
-import geocube
 import numpy as np
 import pandas as pd
-import rasterio
 import rioxarray
 from odc.algo import xr_reproject
 from tqdm import tqdm
@@ -44,7 +42,7 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False):
 
     # List all files in the directory
     events = list(Path(dnbr_path).glob("*.tif"))
-
+    print(dnbr_path)
     # Create save path if not exists
     os.makedirs(save_path, exist_ok=True)
 
@@ -59,13 +57,13 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False):
         path_save_file = os.path.join(save_path, f"{event.stem}.nc")
 
         # Open file using rioxarray
-        event = rioxarray.open_rasterio(event)
+        event_arr = rioxarray.open_rasterio(event)
 
         # Only proceed if the file does not exist
         if not os.path.exists(path_save_file):
             xr_resampled = (
                 xr_reproject(
-                    event,
+                    event_arr,
                     geobox=template.geobox,
                     resampling="bilinear",
                     dst_nodata=np.nan,
@@ -75,13 +73,13 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False):
             )
 
             xr_resampled.to_netcdf(path_save_file)
+
+            if feather:
+                df = xr_resampled.to_dataframe(name="dnbr").dropna().reset_index()
+                df["event_id"] = event.stem
+                dnbr_files.append(df)
         else:
             print(f"Skipping {event.stem} as it already exists in temporary directory")
-
-        if feather:
-            df = xr_resampled.to_dataframe(name="dnbr").dropna().reset_index()
-            df["event_id"] = event.stem
-            dnbr_files.append(df)
 
     if len(dnbr_files) > 0:
         dnbr_files = pd.concat(dnbr_files)
@@ -91,6 +89,13 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False):
             prepare_template(template_path).groupby("grid_id", as_index=False).first()
         )
         dnbr_files = dnbr_files.merge(template, on=["lat", "lon"], how="left")
+
+        # If grid_id and year are floats, transform to int
+        dnbr_files["grid_id"] = dnbr_files["grid_id"].astype(int)
+        dnbr_files["year"] = dnbr_files["year"].astype(int)
+
+        if "band" in dnbr_files.columns:
+            dnbr_files.drop(columns=["band"], inplace=True)
 
         dnbr_files.to_feather(os.path.join(save_path, "dnbr_long.feather"))
 

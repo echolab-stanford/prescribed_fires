@@ -31,8 +31,7 @@ Data will be saved in the following directory structure:
             - dnbr (files per event) in GeoTIFF format
 """
 
-import os
-
+import logging
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
@@ -42,64 +41,73 @@ from src.extract.process_dnbr import process_dnbr
 from src.extract.process_modis_frp import process_modis_file
 from src.extract.process_prism import process_variables
 
+log = logging.getLogger(__name__)
+
 
 @hydra.main(config_path="conf", config_name="extract")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    # # Process the DEM
-    # if cfg.path_to_dem is not None:
-    #     process_dem(
-    #         dem_path=cfg.path_to_dem,
-    #         shape_mask=cfg.shapefile,
-    #         template=cfg.template,
-    #         save_path=os.path.join(cfg.save_path, "dem"),
-    #         feather=cfg.feather,
-    #     )
+    data_extract = cfg.extract.keys()
 
-    # # Process the disturbances
-    # if cfg.path_to_disturbances is not None:
-    #     process_disturbances(
-    #         disturbances_path=cfg.path_to_disturbances,
-    #         template_path=cfg.template,
-    #         save_path=os.path.join(cfg.save_path, "disturbances"),
-    #         shape_mask=cfg.shapefile,
-    #         clean=True,
-    #         feather=cfg.feather,
-    #         wide=cfg.wide,
-    #     )
+    # Process the DEM
+    if "dem" in data_extract:
+        log.info("Processing DEM")
+        process_dem(
+            dem_path=cfg.extract.dem.path,
+            shape_mask=cfg.shape_mask,
+            template=cfg.template,
+            save_path=cfg.extract.dem.save_path,
+            feather=cfg.extract.dem.feather,
+        )
 
-    # # Process the PRISM data
-    # if cfg.path_to_prism is not None:
-    #     process_variables(
-    #         variables=["tmin", "tmax", "tdmean", "vpdmin", "vpdmax", "ppt", "tmean"],
-    #         path_prism_data=cfg.path_to_prism,
-    #         save_path=os.path.join(cfg.save_path, "prism"),
-    #         mask_shape=cfg.shapefile,
-    #         template=cfg.template,
-    #         feather=cfg.feather,
-    #         wide=cfg.wide,
-    #     )
+    # Process the disturbances
+    if "disturbances" in data_extract:
+        log.info("Processing disturbances")
+        process_disturbances(
+            disturbances_path=cfg.extract.disturbances.path,
+            template_path=cfg.template,
+            save_path=cfg.extract.disturbances.save_path,
+            shape_mask=cfg.shape_mask,
+            clean=True,
+            feather=cfg.extract.disturbances.feather,
+            wide=cfg.extract.disturbances.wide,
+        )
 
-    # # Process the MODIS data
-    # if cfg.path_to_modis is not None:
-    #     process_modis_file(
-    #         file_path=cfg.path_to_modis,
-    #         save_path=os.path.join(cfg.save_path, "frp"),
-    #         aoi=cfg.shapefile,
-    #         template=cfg.template,
-    #         feather=cfg.feather,
-    #         wide=cfg.wide,
-    #     )
+    # Process the PRISM data
+    if "prism" in data_extract:
+        log.info("Processing PRISM")
+        process_variables(
+            variables=cfg.extract.prism.variables,
+            path_prism_data=cfg.extract.prism.path,
+            save_path=cfg.extract.prism.save_path,
+            mask_shape=cfg.shape_mask,
+            template=cfg.template,
+            feather=cfg.extract.prism.feather,
+            wide=cfg.extract.prism.wide,
+        )
 
-    # # Process the DNBR data
-    # if cfg.path_to_dnbr is not None:
-    #     process_dnbr(
-    #         dnbr_path=cfg.path_to_dnbr,
-    #         template_path=cfg.template,
-    #         save_path=os.path.join(cfg.save_path, "dnbr_template"),
-    #         feather=cfg.feather,
-    #     )
+    # Process the MODIS data
+    if "frp" in data_extract:
+        log.info("Processing MODIS FRP")
+        process_modis_file(
+            file_path=cfg.extract.frp.path,
+            save_path=cfg.extract.frp.save_path,
+            aoi=cfg.shape_mask,
+            template_path=cfg.template,
+            feather=cfg.extract.frp.feather,
+            wide=cfg.extract.frp.wide,
+        )
+
+    # Process the DNBR data
+    if "dnbr" in data_extract:
+        log.info("Processing DNBR")
+        process_dnbr(
+            dnbr_path=cfg.extract.dnbr.path,
+            template_path=cfg.template,
+            save_path=cfg.extract.dnbr.save_path,
+            feather=cfg.extract.dnbr.feather,
+        )
 
 
 if __name__ == "__main__":

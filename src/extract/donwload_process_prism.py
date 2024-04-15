@@ -1,6 +1,7 @@
 """
 Download and process PRISM raster data
 """
+
 import logging
 import os
 from datetime import timedelta
@@ -20,7 +21,11 @@ def datetime_range(start, end, delta):
 
 
 def download_prism_data_year(
-    var_of_interest, path, year=None, date=None, all_year=True
+    var_of_interest,
+    path,
+    date,
+    all_year=True,
+    year=None,
 ):
     """
     Download .bil data from the PRISM FTP server. This data is monthly and the

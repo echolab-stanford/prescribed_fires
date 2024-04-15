@@ -1,7 +1,7 @@
 import logging
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from src.build.build_data import build_dataset, build_lhs
+from src.build.build_data import build_dataset, build_lhs, treatment_schedule
 
 log = logging.getLogger(__name__)
 
@@ -27,10 +27,11 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Merge both datasets
-    dataset = lhs.merge(rhs, on="grid_id", how="left")
+    treatments = treatment_schedule(rhs, lhs)
 
     # Save the dataset
-    dataset.to_feather(cfg.build.save_path)
+    log.info(f"Saving dataset to {cfg.build.save_path}")
+    treatments.to_feather(cfg.build.save_path)
 
 
 if __name__ == "__main__":

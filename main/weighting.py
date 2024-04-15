@@ -26,7 +26,7 @@ import pandas as pd
 import rioxarray
 from sklearn.preprocessing import MinMaxScaler
 
-from src.run_balancing import run_balancing
+from src.estimate.run_balancing import run_balancing
 from src.utils import expand_grid
 
 
@@ -106,8 +106,6 @@ def prepare_data(path_covars, path_template, path_treatments):
     # Merge with wildfires data
     treatments = treatments.merge(frp_groupped, on=["lat", "lon", "year"], how="left")
     treatments["class_frp"] = treatments["class_frp"].fillna(0)
-
-    treatments
 
     # #### 2. Severity from Landsat and scaling from -1 to 1
 

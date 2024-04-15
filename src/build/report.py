@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def report_treatments(treatments: pd.DataFrame) -> str:
+def report_treatments(treatments: pd.DataFrame) -> None:
     """Generate a cute report of the treatment data in the terminal"""
 
     if not isinstance(treatments, pd.DataFrame):
@@ -34,3 +34,5 @@ def report_treatments(treatments: pd.DataFrame) -> str:
         .grid_id.nunique()
         .to_markdown()
     )
+
+    return None
