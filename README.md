@@ -45,8 +45,9 @@ module load singularity
 singularity exec --nv --cleanenv --bind /home/$USER:/run/user image.sif python main.py
 ```
 
-    [!TIP]
-    The code is relying on the use of GPU for the balancing estimation. You can change the `config/estimation.yaml` to use CPU instead, but this can change the computation time significantly. In our experiments, each balancing experiment took around 15 minutes in a NVIDIA V1000 GPU 16 GB, which is Sherlock's smallest GPU. 
+>[!TIP]
+>The code is relying on the use of GPU for the balancing estimation. You can change the `config/estimation.yaml` to use CPU instead, but this can change the computation time significantly. In our experiments, each balancing experiment took around 15 minutes in a NVIDIA V1000 GPU 16 GB, which is Sherlock's smallest GPU. 
+
 Alternatively, you can try to run the experiments in a local environment by first installing the required environment: 
 
 ```bash
@@ -62,22 +63,21 @@ And then running the experiments in `main` with the defined configuration files 
 | Variable       | Source                                                  |   Time    |          Link           |
 | -------------- | ------------------------------------------------------- | :-------: | :---------------------: |
 | Wildfires      | Monitoring Trends in Burn Severity                      | 1987-2022 |        [MTBS][3]        |
-| Fire severity  | $\Delta$NBR calculated from Landsat Collection 2        | 1987-2022 | [Planetary Computer][4] |
+| Fire severity  | ${\Delta}$NBR calculated from Landsat Collection 2[^1]       | 1987-2022 | [Planetary Computer][4] |
 | Fire Intensity | MODIS Burned Area Products (FIRMS)                      | 2000-2022 |    [MODIS Firms][5]     |
 | Weather        | PRISM fire climatology variables                        | 1985-2022 |       [PRISM][8]        |
-| DEM            | Digital Elevation Model (slope is calculated by us)[^1] |     -     |       [Paper][6]        |
+| DEM            | Digital Elevation Model (slope is calculated by us)[^2] |     -     |       [Paper][6]        |
 | Disturbances   | Disturbance Agents in California                        | 1987-2021 |     [Dataverse][7]      |
 | Forest Cover   | NVDI calculation from Landsat Collection 2              | 1987-2022 | [Planetary Computer][4] |
 
-[^1]: The DEM variables are calculated using the `xarray-spatial` algorithms. 
+[^1]: See our own library [`dnbr_extract`][9] that follows an offset calculation of the NBR index.
+[^2]: The DEM variables are calculated using the `xarray-spatial` algorithms.
 
 ### Notes
 See the amazing libraries that we rely on to do this work:
  - [CBPS](https://github.com/apoorvalal/covariate_balancing_propensity_scores)
- - [dnbr_extract](https://github.com/echolab-stanford/dnbr_extract)
 
-For now all things here are very experimental! 
-
+<!-- References -->
 [1]: https://hydra.cc/
 [2]: https://github.com/pangeo-data/pangeo-docker-images?tab=readme-ov-file
 [3]: https://www.mtbs.gov/direct-download
@@ -86,3 +86,4 @@ For now all things here are very experimental!
 [6]: https://www-nature-com.stanford.idm.oclc.org/articles/sdata201840
 [7]: https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/CVTNLY
 [8]: https://prism.oregonstate.edu/
+[9]: https://github.com/echolab-stanford/dnbr_extract
