@@ -1,29 +1,31 @@
+import os
 import logging
 import hydra
-from omegaconf import DictConfig, OmegaConf
-from prescribed.build.build_data import build_dataset, build_lhs, treatment_schedule
+from omegaconf import DictConfig
+from prescribed.build.build_data import (
+    fill_treatment_template,
+    build_lhs,
+    treatment_schedule,
+)
 
 log = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="conf", config_name="build")
+@hydra.main(config_path="../conf", config_name="build")
 def main(cfg: DictConfig) -> None:
-    print(OmegaConf.to_yaml(cfg))
-
     log.info("Building dataset")
-    rhs = build_dataset(
+    rhs = fill_treatment_template(
         template_path=cfg.template,
-        treatments_path=cfg.build.dataset.treatments_path,
-        query=cfg.build.dataset.query,
-        staggered=cfg.build.dataset.staggered,
-        min_count_treatments=cfg.build.dataset.min_count_treatments,
-        verbose=cfg.build.dataset.verbose,
+        treatments_path=cfg.build.treatments_path,
+        query=cfg.build.query,
+        staggered=cfg.build.staggered,
+        min_count_treatments=cfg.build.min_count_treatments,
+        verbose=cfg.build.verbose,
     )
 
-    log.info("Building LHS")
+    log.info("Building LHS: FRP and dNBR")
     lhs = build_lhs(
-        template_path=cfg.template,
-        covariates_dict=cfg.build.lhs.covariates_dict,
+        covariates_dict=cfg.build.lhs,
     )
 
     # Merge both datasets
@@ -31,7 +33,10 @@ def main(cfg: DictConfig) -> None:
 
     # Save the dataset
     log.info(f"Saving dataset to {cfg.build.save_path}")
-    treatments.to_feather(cfg.build.save_path)
+    if not os.path.exists(cfg.build.save_path):
+        os.mkdir(cfg.build.save_path)
+
+    treatments.to_feather(os.path.join(cfg.build.save_path, "wide_treats.feather"))
 
 
 if __name__ == "__main__":

@@ -1,35 +1,4 @@
-"""Extract and align data to template grid
-
-Extract all data to a processed directory with all the data aligned to a template
-and masked using a concondant shapefile. This scrip will just execute the functions
-in the source directory to process:
-    - DEM (Elevation, Slope, Aspect, Curvature)
-    - Disturbances
-    - PRISM
-    - MODIS FRP
-
-Data will be saved in the following directory structure:
-    - processed
-        - dem
-            - elevation.nc
-            - slope.nc
-            - aspect.nc
-            - curvature.nc
-        - disturbances
-            - disturbances.nc
-        - prism
-            - tmin.nc
-            - tmax.nc
-            - tdmean.nc
-            - vpdmin.nc
-            - vpdmax.nc
-            - ppt.nc
-            - tmean.nc
-        - modis
-            - frp (files per year)
-        - dnbr
-            - dnbr (files per event) in GeoTIFF format
-"""
+"""Extract and align data to template grid"""
 
 import logging
 
@@ -109,6 +78,7 @@ def main(cfg: DictConfig) -> None:
             template_path=cfg.template,
             save_path=cfg.extract.dnbr.save_path,
             feather=cfg.extract.dnbr.feather,
+            overwrite=cfg.extract.dnbr.overwrite,
         )
 
     # Process the land type data

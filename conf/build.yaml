@@ -10,5 +10,7 @@ build:
   staggered: true
   min_count_treatments: 2
   verbose: false
-  save_path: "${save_path}/wide_treatments.feather"
-
+  save_path: "${save_path}/wide_treatments"
+  lhs:
+    frp: ${save_path}/frp/frp_concat.feather
+    dnbr: ${save_path}/dnbr/dnbr_long.feather
