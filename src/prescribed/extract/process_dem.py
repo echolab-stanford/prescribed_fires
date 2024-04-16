@@ -8,7 +8,7 @@ import xarray as xr
 from rasterio.warp import Resampling, reproject
 from xrspatial import aspect, curvature, slope
 
-from src.utils import transform_array_to_xarray, prepare_template
+from prescribed.utils import transform_array_to_xarray, prepare_template
 
 
 def process_dem(dem_path, shape_mask, template, save_path, feather=False):

@@ -24,7 +24,7 @@ extract:
     feather: true
     wide: true
   dnbr:
-    path: "${root_path}/processed/dnbr_landsat_c2_l2_buf"
+    path: "${data_path}/dnbr_landsat_c2_l2_buf"
     save_path: "${save_path}/dnbr"
     feather: true
   disturbances:
@@ -36,3 +36,6 @@ extract:
    path: "${data_path}/dem/elevation_1KMmn_GMTEDmn.tif"
    save_path: "${save_path}/dem"
    feather: true
+  land_type:
+    path: "${data_path}/US_105_EVT/Tif/us_105evt_physio.tif"
+    save_path: "${save_path}/land_type"

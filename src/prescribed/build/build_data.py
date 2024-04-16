@@ -240,6 +240,11 @@ def treatment_schedule(
             how="left",
         )
 
+    # Set all NaN values as zero for the class columns:
+    # class_frp and class_dnbr
+    treatment_template["class_frp"] = treatment_template["class_frp"].fillna(0)
+    treatment_template["class_dnbr"] = treatment_template["class_dnbr"].fillna(0)
+
     # Pivot data to wide format
     treats_wide = pd.pivot(
         treatment_template,

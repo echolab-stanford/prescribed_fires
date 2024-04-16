@@ -8,7 +8,7 @@ from tqdm import tqdm
 from geopandas.tools import sjoin
 from geocube.api.core import make_geocube
 
-from src.utils import prepare_template
+from prescribed.utils import prepare_template
 
 log = logging.getLogger(__name__)
 

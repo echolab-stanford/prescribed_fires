@@ -7,10 +7,10 @@ template:
 	python main/create_treatments.py
 
 extract:
-    python src/run_extract.py
+    python main/run_extract.py
 
 balance:
-    python src/run_balancing.py
+    python main/run_balancing.py
 
 analysis:
-    python src/run_analysis.py
+    python main/run_analysis.py

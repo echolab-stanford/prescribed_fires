@@ -1,6 +1,5 @@
 # Prescribed and low-intensity/severity fires project
 
-
 This repo has all the replication data for the low-intensity and severity project. In this project we estimate the effects of specific fire events on the future fire dynamics, this means both the probability of future fire, its intensity and severity, and the prevented emissions from fire treatments. To do this, we rely on two main approaches: _synthtetic control_ and _differences in differences_. This repo contains code to execute data processing and estimation of the described effects in the paper. 
 
 ## Library configuration and experiments
@@ -21,6 +20,10 @@ extract:
 ```
 
 You can access to help to make your own configuration files using `python main.py --help`, or by re-using some of the configuration files in the `conf` folder. Remember Hydra will save the configuration files for every experiment in the `outputs` folder with the date and time of running. You can override this behavior, but is good for reproducibility. 
+
+<details>
+<summary>More on configuration files </summary>
+</details>
 
 ## Running experiments
 
@@ -46,7 +49,7 @@ singularity exec --nv --cleanenv --bind /home/$USER:/run/user image.sif python m
 ```
 
 >[!TIP]
->The code is relying on the use of GPU for the balancing estimation. You can change the `config/estimation.yaml` to use CPU instead, but this can change the computation time significantly. In our experiments, each balancing experiment took around 15 minutes in a NVIDIA V1000 GPU 16 GB, which is Sherlock's smallest GPU. 
+>The code is relying on the use of GPU for the balancing estimation. You can change the `config/estimation.yaml` to use CPU instead, but this can change the computation time significantly. In our experiments, each balancing experiment took around 15 minutes in a NVIDIA V100 GPU 16 GB, which is Sherlock's smallest GPU. 
 
 Alternatively, you can try to run the experiments in a local environment by first installing the required environment: 
 

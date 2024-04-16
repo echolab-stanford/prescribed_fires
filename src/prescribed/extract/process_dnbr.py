@@ -7,7 +7,7 @@ import rioxarray
 from odc.algo import xr_reproject
 from tqdm import tqdm
 
-from src.utils import prepare_template
+from prescribed.utils import prepare_template
 
 
 def process_dnbr(dnbr_path, template_path, save_path, feather=False):

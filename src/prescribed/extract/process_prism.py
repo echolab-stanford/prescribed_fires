@@ -12,7 +12,7 @@ import xarray as xr
 from rasterio.warp import Resampling, reproject
 from tqdm import tqdm
 
-from src.utils import prepare_template, transform_array_to_xarray
+from prescribed.utils import prepare_template, transform_array_to_xarray
 
 
 def process_prism(path_to_zip, mask_shape, save_path=None, template=None):

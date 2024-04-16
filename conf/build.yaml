@@ -10,5 +10,5 @@ build:
   staggered: true
   min_count_treatments: 2
   verbose: false
+  save_path: "${save_path}/wide_treatments.feather"
 
-  
