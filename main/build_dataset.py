@@ -1,7 +1,7 @@
 import logging
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from src.build.build_data import build_dataset, build_lhs, treatment_schedule
+from prescribed.build.build_data import build_dataset, build_lhs, treatment_schedule
 
 log = logging.getLogger(__name__)
 

@@ -32,19 +32,21 @@ Data will be saved in the following directory structure:
 """
 
 import logging
+
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from src.extract.process_dem import process_dem
-from src.extract.process_disturbances import process_disturbances
-from src.extract.process_dnbr import process_dnbr
-from src.extract.process_modis_frp import process_modis_file
-from src.extract.process_prism import process_variables
+from prescribed.extract.process_dem import process_dem
+from prescribed.extract.process_disturbances import process_disturbances
+from prescribed.extract.process_dnbr import process_dnbr
+from prescribed.extract.process_modis_frp import process_modis_file
+from prescribed.extract.process_prism import process_variables
+from prescribed.extract.process_land_type import process_land_type
 
 log = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="conf", config_name="extract")
+@hydra.main(config_path="../conf", config_name="extract")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
@@ -107,6 +109,15 @@ def main(cfg: DictConfig) -> None:
             template_path=cfg.template,
             save_path=cfg.extract.dnbr.save_path,
             feather=cfg.extract.dnbr.feather,
+        )
+
+    # Process the land type data
+    if "land_type" in data_extract:
+        log.info("Processing land type")
+        process_land_type(
+            path=cfg.extract.land_type.path,
+            template_path=cfg.template,
+            save_path=cfg.extract.land_type.save_path,
         )
 
 
