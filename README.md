@@ -8,7 +8,8 @@ You can quickly replicate the data and results pipeline by running the makefile 
 1. Create a local environment or use the provided Docker image as discussed in the [Running experiments](#running-experiments) section. 
 2. Change the configuration files in `conf/` to match your local paths  
 <details>
-<summary> Example with data extraction configuration </summary>
+<summary><i>Example with data extraction configuration</i></summary>
+
 Notice for data extraction, the first step in our data pipeline, we need to tell our scripts where each of our datasets are located. For ease of use, and also because we run this on an HPC cluster, we suggest you to follow a simple directory nomenclature: `raw` for raw data, `processed` for processed data, and `geoms` for all spatial data. You can override this order if you want too. 
 
 In the configuration files, we use simple variables that can be also overriden if the user wants, or simply also specified on the command-line using [Hydra][10]. 
@@ -30,8 +31,8 @@ Once you have created an environment and changed the configuration files, you ca
 make all
 ```
 
-## Library configuration and experiments
-Balancing, estimation, and data management is done in Python. To easily run extraction from raw files (see more in [datasets](#datasets)) and run balancing and estimation, we use [Hydra][1], a configuration library that relies on a set of configuration files in YAML format to configure and re-run paper analysis. 
+## Run your own configuration and experiments
+To easily run extraction from raw files (see more in [datasets](#datasets)) and run balancing and estimation, we use [Hydra][1], a configuration library that relies on a set of configuration files in YAML format to configure and re-run paper analysis. 
 
 For instance, to build the main analysis dataset, we can use the following configuration file:
 
@@ -74,7 +75,7 @@ singularity exec --nv --cleanenv --bind /home/$USER:/run/user image.sif python m
 ```
 
 >[!TIP]
->The code is relying on the use of GPU for the balancing estimation. You can change the `config/estimation.yaml` to use CPU instead, but this can change the computation time significantly. In our experiments, each balancing experiment took around 15 minutes in a NVIDIA V100 GPU 16 GB, which is Sherlock's smallest GPU. 
+>The code is relying on the use of GPU for the balancing estimation. If no GPU is detected by PyTorch, the balancing will run on CPUs, but this can change the computation time significantly. In our experiments, each balancing experiment took around 15 minutes in a NVIDIA V100 GPU 16 GB, which is Sherlock's modal GPU.
 
 Alternatively, you can try to run the experiments in a local environment by first installing the required environment: 
 
