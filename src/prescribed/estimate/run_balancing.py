@@ -1,15 +1,17 @@
+import logging
 import os
 import re
-from itertools import product
 import sqlite3
-import logging
+from itertools import product
 from typing import List, Union
+
 import numpy as np
 import pandas as pd
 import torch
-from .cbps_torch import CBPS
 from sklearn.preprocessing import MinMaxScaler
+
 from ..utils import generate_run_id
+from .cbps_torch import CBPS
 
 log = logging.getLogger(__name__)
 
@@ -58,9 +60,6 @@ def run_balancing(
         None
     """
 
-    # Start db connection to store data
-    conn = sqlite3.connect(save_path)
-
     # Define treatment with treatment column and class column
     treat_class = (df[treat_col] * df[class_col]).values
     w = np.where(treat_class == intensity_class, 1, 0)
@@ -72,7 +71,7 @@ def run_balancing(
     # Drop grid_id and treatment
     df = df.drop(columns=[row_id, treat_col])
 
-    # Select columns to drop for balancing (all before the focal year)
+    # Select columns to drop for balancing (all after the focal year and the min year)
     cols_keep = [
         col
         for col in df.columns.tolist()
@@ -103,7 +102,8 @@ def run_balancing(
         weights = cbps.weights(numpy=True)
 
         # Save results as a dataframe
-        df_results = pd.DataFrame(weights)
+        df_results = pd.DataFrame({"weights": weights})
+
         df_results = df_results.assign(
             reg=reg,
             lr=lr,
@@ -125,10 +125,10 @@ def run_balancing(
 
         # Merge all metrics and add covariate name
         std_diffs_df = pd.concat(list_metrics, axis=1)
+
         std_diffs_df = std_diffs_df.assign(
             reg=reg,
             lr=lr,
-            row_id=id_col,
             model_run_id=run_id,
             focal_year=focal_year,
         )
@@ -147,7 +147,6 @@ def run_balancing(
         df_loss = df_loss.assign(
             reg=reg,
             lr=lr,
-            row_id=id_col,
             model_run_id=run_id,
             focal_year=focal_year,
         )
@@ -156,9 +155,15 @@ def run_balancing(
             if not os.path.exists(save_path):
                 log.info(f"Creating SQLite database in: {save_path}")
 
+            # Start db connection to store data
+            conn = sqlite3.connect(save_path, isolation_level=None)
+            conn.execute("pragma journal_mode=wal;")
+
             df_results.to_sql("results", conn, if_exists="append", index=False)
             std_diffs_df.to_sql("std_diffs", conn, if_exists="append", index=False)
             df_loss.to_sql("loss", conn, if_exists="append", index=False)
+
+            conn.close()
 
         # Clean memory
         del cbps, weights, df_results, std_diffs_df

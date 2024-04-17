@@ -30,6 +30,8 @@ log = logging.getLogger(__name__)
 
 
 def prepare_data(dict_paths, treats_wide):
+    # Load treats
+    treats_wide = pd.read_feather(treats_wide)
     # Load datasets and merge with template
     data = []
     for key, path in dict_paths.items():

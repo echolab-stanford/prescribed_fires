@@ -27,6 +27,7 @@ extract:
     path: "${data_path}/dnbr_landsat_c2_l2_buf"
     save_path: "${save_path}/dnbr"
     feather: true
+    overwrite: true
   disturbances:
     path: "${data_path}/disturbances"
     save_path: "${save_path}/disturbances"
