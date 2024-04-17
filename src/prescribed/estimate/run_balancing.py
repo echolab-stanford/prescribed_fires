@@ -102,7 +102,7 @@ def run_balancing(
         weights = cbps.weights(numpy=True)
 
         # Save results as a dataframe
-        df_results = pd.DataFrame({"weights": weights})
+        df_results = pd.DataFrame({"weights": weights}, dtype=(np.float64))
 
         df_results = df_results.assign(
             reg=reg,
@@ -157,14 +157,15 @@ def run_balancing(
 
             # Start db connection to store data
             conn = sqlite3.connect(save_path, isolation_level=None)
-            conn.execute("pragma journal_mode=wal;")
+            cursor = conn.cursor()
+            cursor.execute("pragma journal_mode=WAL;")
 
             df_results.to_sql("results", conn, if_exists="append", index=False)
             std_diffs_df.to_sql("std_diffs", conn, if_exists="append", index=False)
             df_loss.to_sql("loss", conn, if_exists="append", index=False)
 
             conn.close()
-
+            log.info(f"Finish loading data")
         # Clean memory
         del cbps, weights, df_results, std_diffs_df
         torch.cuda.empty_cache()
