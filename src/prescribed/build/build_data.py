@@ -34,7 +34,8 @@ def fill_treatment_template(
     treatment, and will remove all observations will more than three observations
     in time (i.e. we only want twice exposed pixels).
 
-    Args:
+    Parameters:
+    ----------
         template_path (str): Path to the template raster
         treatments_path (str): Path to the feather file with treatments
         query (str): A pandas query to filter the treatments,
@@ -49,6 +50,7 @@ def fill_treatment_template(
 
 
     Returns:
+    -------
         pd.DataFrame: DataFrame with the template filled with treatments and
         additional columns:
             - grid_id: Unique identifier for each pixel
@@ -111,9 +113,7 @@ def fill_treatment_template(
     return treatments
 
 
-def build_lhs(
-    template_path: str, covariates_dict: dict[str, str], **kwargs
-) -> pd.DataFrame:
+def build_lhs(covariates_dict: dict[str, str]) -> pd.DataFrame:
     """Aux function to build the LHS of the design matrix
 
     Our regressions need DVs! This function uses the template to build the DV and
@@ -121,13 +121,14 @@ def build_lhs(
     to reduce the size of the dataset as we can subset only the pixels we need, but
     estimation needs to be flexible too, so this can be a big dataset!
 
-    Args:
-        template_path (str): Path to the template raster
+    Parameters:
+    ----------
         covariates_dict (dict): Path to covariates feather files. The code expects
         a dict with covariate keys. These keys should be "dnbr" or "frp", otherwise
         an error will be raised.
 
     Returns:
+    -------
         pd.DataFrame: DataFrame with the template filled with the covariates and
         additional columns:
             - grid_id: Unique identifier for each pixel
@@ -152,13 +153,15 @@ def build_lhs(
     # Categorize covariates
     for key, data in covariates.items():
         if key == "frp":
-            data["year"] = data.time.dt.year
+            if "year" not in data.columns:
+                data["year"] = data.time.dt.year
+
             frp_groupped = data.groupby(["grid_id", "year"], as_index=False).frp.max()
 
             # Find the FRP class from the earliest fire per each grid using the
             # FRP threshold values (Ichoku et al. 2014):
             conditions = [
-                frp_groupped.frp < 100,
+                (frp_groupped.frp > 0) & (frp_groupped.frp < 100),
                 (frp_groupped.frp >= 100) & (frp_groupped.frp < 500),
                 (frp_groupped.frp >= 500) & (frp_groupped.frp < 1000),
                 (frp_groupped.frp >= 1000) & (frp_groupped.frp < 1500),
@@ -189,7 +192,13 @@ def build_lhs(
             choices = [0, 1, 2, 3, 4, 5]
 
             # Asigning FRP class to each fire
-            data["class_dnbr"] = np.select(conditions, choices, default=np.nan)
+            data.loc[:, "class_dnbr"] = np.select(conditions, choices, default=np.nan)
+
+            # Drop weird points (see analysis/weird_points.ipynb)
+            data = data[~data.grid_id.isna()]
+
+            # Change column type to facilitate merge with frp later
+            data.loc[:, "grid_id"] = data["grid_id"].astype(int)
             covariates[key] = data
 
         else:
@@ -199,7 +208,7 @@ def build_lhs(
 
 
 def treatment_schedule(
-    treatment_template: pd.DataFrame, treatment_fire: dict, save_path: str
+    treatment_template: pd.DataFrame, treatment_fire: dict
 ) -> pd.DataFrame:
     """Create treatment dataframe organized by year and grid_id
 
@@ -213,7 +222,7 @@ def treatment_schedule(
     a direct definition of focal years, which are the years of treatment assignment
     in the original dataset under conditions defined by the user.
 
-    Args:
+    Parameters:
     ----
     treatment_template (pd.DataFrame): DataFrame with the template filled with
         treatments and additional columns:
@@ -234,16 +243,32 @@ def treatment_schedule(
 
     # Merge treatments and fire data
     for key, value in treatment_fire.items():
-        treatment_template = treatment_template.merge(
-            value,
-            on=["grid_id", "year"],
-            how="left",
-        )
+        if key == "dnbr":
+            treatment_template = treatment_template.merge(
+                value,
+                right_on=["grid_id", "event_id"],
+                left_on=["grid_id", "Event_ID"],
+                how="left",
+            )
+        elif key == "frp":
+            treatment_template = treatment_template.merge(
+                value,
+                on=["grid_id", "year"],
+                how="left",
+            )
+        else:
+            raise KeyError(f"Key {key} not found in datasets")
 
     # Set all NaN values as zero for the class columns:
     # class_frp and class_dnbr
     treatment_template["class_frp"] = treatment_template["class_frp"].fillna(0)
     treatment_template["class_dnbr"] = treatment_template["class_dnbr"].fillna(0)
+
+    # Drop coordinate columns
+    treatment_template.drop(
+        columns=[c for c in treatment_template.columns if "lon" in c or "lat" in c],
+        inplace=True,
+    )
 
     # Pivot data to wide format
     treats_wide = pd.pivot(

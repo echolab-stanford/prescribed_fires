@@ -1,16 +1,75 @@
+import logging
 import os
 from pathlib import Path
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
 import rioxarray
+import xarray as xr
 from odc.algo import xr_reproject
 from tqdm import tqdm
 
 from prescribed.utils import prepare_template
 
+log = logging.getLogger(__name__)
 
-def process_dnbr(dnbr_path, template_path, save_path, feather=False):
+
+def process_dnbr_feather(
+    list_files: List[Union[Path, pd.DataFrame]], template_path: str, save_path: str
+) -> None:
+    """Aux file to process list of NetCDFs to feather file
+
+    This function takes a file of dnbr files in NetCDF format and reads them into
+    feather format while adding the event_id in the process. The function will either
+    take a list of files or a list of open objects in feather format.
+
+    Parameters
+    ----------
+    list_files : list
+        List of files to process. The files can be either a string with paths or a set of pd.Dataframe objects.
+    template_path : str
+        Path to the template file to reproject to. The template should be a GeoTIFF
+    save_path : str
+        Path to save the feather file to
+    """
+
+    # Check all elements in the list are a dataframe
+    if all([isinstance(f, pd.DataFrame) for f in list_files[1:5]]):
+        df = pd.concat(list_files)
+    else:
+        list_objs = []
+        for p in tqdm(list_files, desc="Reading nc4 files into feather..."):
+            df = xr.open_dataarray(p).to_dataframe("dnbr").dropna().reset_index()
+            df["event_id"] = p.stem
+            list_objs.append(df)
+        df = pd.concat(list_objs)
+
+    # Merge with template
+    template = (
+        prepare_template(template_path).groupby("grid_id", as_index=False).first()
+    )
+
+    # Drop year column to avoid problems!
+    if "year" in template.columns:
+        template.drop(columns=["year"], inplace=True)
+
+    # Remove weird_pixels (see analysis/weird_pixels.ipynb) by using an inner merge
+    dnbr_files = df.merge(template, on=["lat", "lon"])
+
+    # If grid_id and year are floats, transform to int
+    dnbr_files["grid_id"] = dnbr_files["grid_id"].astype(int)
+
+    if "band" in dnbr_files.columns:
+        dnbr_files.drop(columns=["band"], inplace=True)
+
+    log.info(f"Saving file into {os.path.join(save_path, 'dnbr_long.feather')}")
+    dnbr_files.to_feather(os.path.join(save_path, "dnbr_long.feather"))
+
+    return None
+
+
+def process_dnbr(dnbr_path, template_path, save_path, feather=False, overwrite=False):
     """Process DNBR data for template
 
     Process DNBR data (@ 30m resolution) to overlay with a user-defined template.
@@ -33,6 +92,8 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False):
     feather : bool, optional
         If True, the function will save a feather file with the long format of the
         DNBR data. This is useful for further analysis. Default is False
+    overwrite : bool, optional. If True, the function will overwrite existing files.
+        This will only work if the NetCDF files are available in the save_path.
 
     Returns
     -------
@@ -81,22 +142,13 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False):
         else:
             print(f"Skipping {event.stem} as it already exists in temporary directory")
 
-    if len(dnbr_files) > 0:
-        dnbr_files = pd.concat(dnbr_files)
-
-        # Merge with template
-        template = (
-            prepare_template(template_path).groupby("grid_id", as_index=False).first()
-        )
-        dnbr_files = dnbr_files.merge(template, on=["lat", "lon"], how="left")
-
-        # If grid_id and year are floats, transform to int
-        dnbr_files["grid_id"] = dnbr_files["grid_id"].astype(int)
-        dnbr_files["year"] = dnbr_files["year"].astype(int)
-
-        if "band" in dnbr_files.columns:
-            dnbr_files.drop(columns=["band"], inplace=True)
-
-        dnbr_files.to_feather(os.path.join(save_path, "dnbr_long.feather"))
+    if len(dnbr_files) > 0 and feather:
+        process_dnbr_feather(dnbr_files, template_path, save_path)
+    elif overwrite:
+        log.info(f"Reading files in {save_path} to create a feather file")
+        dnbr_files = list(Path(save_path).glob("*.nc"))
+        process_dnbr_feather(dnbr_files, template_path, save_path)
+    else:
+        log.info("No DNBR files were processed as feather. Check the input directory")
 
     return None
