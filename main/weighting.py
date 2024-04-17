@@ -24,6 +24,7 @@ from functools import reduce
 import hydra
 import pandas as pd
 from omegaconf import DictConfig
+from prescribed.db import create_db_tables
 from prescribed.estimate.run_balancing import run_balancing
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,9 @@ def main(cfg: DictConfig) -> None:
         dict_paths=cfg.data.dict_paths,
         treats_wide=cfg.data.treats_wide,
     )
+
+    log.info(f"Create dataset tables in {cfg.balancing.save_path}")
+    create_db_tables(cfg.balancing.save_path)
 
     # Run balancing
     run_balancing(
