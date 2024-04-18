@@ -163,9 +163,11 @@ def run_balancing(
         if save_path:
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-                os.makedirs(os.path.join(save_path, "results"))
-                os.makedirs(os.path.join(save_path, "std_diffs"))
-                os.makedirs(os.path.join(save_path, "loss"))
+
+            # Create intermediary folders
+            os.makedirs(os.path.join(save_path, "results"), exist_ok=True)
+            os.makedirs(os.path.join(save_path, "std_diffs"), exist_ok=True)
+            os.makedirs(os.path.join(save_path, "loss"), exist_ok=True)
 
             df_results.to_parquet(
                 os.path.join(save_path, "results", f"results_{run_id}.parquet")
