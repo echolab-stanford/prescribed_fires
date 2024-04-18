@@ -16,8 +16,9 @@ def create_db_tables(db_path: str) -> None:
         lr REAL,
         row_id INTEGER,
         model_run_id TEXT,
-        focal_year INTEGER
-        PRIMARY KEY (model_run_id, focal_year, row_id)
+        focal_year INTEGER,
+        land_type TEXT,
+        PRIMARY KEY (model_run_id, focal_year, row_id, land_type)
         ON CONFLICT IGNORE
         )
         """
@@ -35,8 +36,9 @@ def create_db_tables(db_path: str) -> None:
         lr REAL,
         model_run_id TEXT,
         focal_year INTEGER,
-        covar TEXT
-        PRIMARY KEY (model_run_id, focal_year, covar)
+        covar TEXT,
+        land_type TEXT,
+        PRIMARY KEY (model_run_id, focal_year, covar, land_type)
         ON CONFLICT IGNORE
         )
         """
@@ -49,11 +51,13 @@ def create_db_tables(db_path: str) -> None:
         loss REAL,
         lr_decay REAL,
         iter INTEGER,
+        niter INTEGER,
         reg REAL,
         lr REAL,
         model_run_id TEXT,
-        focal_year INTEGER
-        PRIMARY KEY (model_run_id, focal_year)
+        focal_year INTEGER,
+        land_type TEXT,
+        PRIMARY KEY (model_run_id, focal_year, land_type, niter)
         ON CONFLICT IGNORE
         )
         """

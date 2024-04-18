@@ -86,6 +86,7 @@ def main(cfg: DictConfig) -> None:
         niter=cfg.balancing.niter,
         metrics=cfg.balancing.metrics,
         save_path=cfg.balancing.save_path,
+        extra_dict_elements={"land_type": cfg.balancing.land_type},
     )
 
 

@@ -1,5 +1,6 @@
 import logging
 import os
+import pdb
 import re
 import sqlite3
 from itertools import product
@@ -27,6 +28,7 @@ def run_balancing(
     metrics: Union[str, List[str]],
     save_path: str,
     intensity_class: int = 1,
+    extra_dict_elements: dict = None,
     **kwargs,
 ) -> None:
     """Run balancing for a given focal year using CBPS.
@@ -54,6 +56,7 @@ def run_balancing(
         metrics (str ot list): The method to be used for assess balace in standarized differences
         save_path (str): If True, the function will save the results to a file
         intesnity_class (int): The intensity/severity class to use to define control
+        extra_dict_elements (dict): Extra elements to be added to all the results dataframes. This is useful if you want ot pass metadata. Default is None
         **kwargs: Other arguments to be passed to the CBPS function
 
     Returns:
@@ -102,7 +105,7 @@ def run_balancing(
         weights = cbps.weights(numpy=True)
 
         # Save results as a dataframe
-        df_results = pd.DataFrame({"weights": weights}, dtype=(np.float64,))
+        df_results = pd.DataFrame({"weights": weights}, dtype=(np.float64))
 
         df_results = df_results.assign(
             reg=reg,
@@ -111,6 +114,7 @@ def run_balancing(
             model_run_id=run_id,
             focal_year=focal_year,
         )
+        df_results = df_results.assign(**extra_dict_elements)
 
         # Save standarized differences for all metrics
         list_metrics = []
@@ -132,6 +136,7 @@ def run_balancing(
             model_run_id=run_id,
             focal_year=focal_year,
         )
+        std_diffs_df = std_diffs_df.assign(**extra_dict_elements)
 
         # If cbps has an intercept, at it to the column name
         if cbps.intercept:
@@ -142,7 +147,12 @@ def run_balancing(
 
         # Save loss to a dataframe
         df_loss = pd.DataFrame(
-            {"loss": cbps.loss, "lr_decay": np.array(cbps.lr_decay), "iter": cbps.niter}
+            {
+                "loss": cbps.loss,
+                "lr_decay": np.array(cbps.lr_decay),
+                "iter": cbps.niter,
+                "niter": range(1, cbps.niter + 1),
+            }
         )
         df_loss = df_loss.assign(
             reg=reg,
@@ -150,6 +160,7 @@ def run_balancing(
             model_run_id=run_id,
             focal_year=focal_year,
         )
+        df_loss = df_loss.assign(**extra_dict_elements)
 
         if save_path:
             if not os.path.exists(save_path):
