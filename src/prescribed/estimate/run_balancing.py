@@ -1,8 +1,6 @@
 import logging
 import os
-import pdb
 import re
-import sqlite3
 from itertools import product
 from typing import List, Union
 
@@ -98,7 +96,7 @@ def run_balancing(
     # Run CBPS for all combinations of regularization and learning rate
     for reg, lr in product(reg_list, lr_list):
         # Generate hash id for model run
-        run_id = generate_run_id([reg, lr])
+        run_id = generate_run_id([reg, lr, focal_year])
 
         # Run balancing
         cbps = CBPS(X=X, W=w, estimand="ATT", reg=reg, lr=lr, **kwargs)
@@ -163,19 +161,22 @@ def run_balancing(
         df_loss = df_loss.assign(**extra_dict_elements)
 
         if save_path:
-            if not os.path.exists(save_path):
-                log.info(f"Creating SQLite database in: {save_path}")
+            df_results.to_parquet(
+                os.path.join(save_path, "results", f"results_{run_id}.parquet"),
+                if_exists="append",
+                index=False,
+            )
+            std_diffs_df.to_parquet(
+                os.path.join(save_path, "std_diffs", f"std_diffs_{run_id}.parquet"),
+                if_exists="append",
+                index=False,
+            )
+            df_loss.to_parquet(
+                os.path.join(save_path, "loss", f"loss_{run_id}.parquet"),
+                if_exists="append",
+                index=False,
+            )
 
-            # Start db connection to store data
-            conn = sqlite3.connect(save_path, isolation_level=None)
-            cursor = conn.cursor()
-            cursor.execute("pragma journal_mode=WAL;")
-
-            df_results.to_sql("results", conn, if_exists="append", index=False)
-            std_diffs_df.to_sql("std_diffs", conn, if_exists="append", index=False)
-            df_loss.to_sql("loss", conn, if_exists="append", index=False)
-
-            conn.close()
             log.info(f"Finish loading data in {save_path}")
         # Clean memory
         del cbps, weights, df_results, std_diffs_df
