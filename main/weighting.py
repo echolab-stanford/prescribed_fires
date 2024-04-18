@@ -60,7 +60,7 @@ def prepare_data(dict_paths, treats_wide):
     return df
 
 
-@hydra.main(config_path="../conf", config_name="balance")
+@hydra.main(version_base=None, config_path="../conf", config_name="balance")
 def main(cfg: DictConfig) -> None:
     log.info("Building dataset")
     # Prepare data
@@ -74,7 +74,7 @@ def main(cfg: DictConfig) -> None:
         df=df[df.land_type.isin([cfg.balancing.land_type])].dropna(),
         focal_year=cfg.balancing.focal_year,
         treat_col=f"treat_{cfg.balancing.focal_year}",
-        class_col=f"class_frp_{cfg.balancing.focal_year}",
+        class_col=f"class_{cfg.balancing.treatment}_{cfg.balancing.focal_year}",
         row_id=cfg.balancing.row_id,
         reg_list=cfg.balancing.reg,
         lr_list=cfg.balancing.lr,

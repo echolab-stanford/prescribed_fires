@@ -22,6 +22,7 @@ data:
 
 balancing:
   land_type: 1
+  treatment: frp
   focal_year: 2020
   reg:
   # - 0
@@ -47,4 +48,4 @@ balancing:
   metrics:
   - "smd"
   - "asmd"
-  save_path: "models.db"
+  save_path: "./models"

@@ -161,25 +161,25 @@ def run_balancing(
         df_loss = df_loss.assign(**extra_dict_elements)
 
         if save_path:
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+                os.makedirs(os.path.join(save_path, "results"))
+                os.makedirs(os.path.join(save_path, "std_diffs"))
+                os.makedirs(os.path.join(save_path, "loss"))
+
             df_results.to_parquet(
-                os.path.join(save_path, "results", f"results_{run_id}.parquet"),
-                if_exists="append",
-                index=False,
+                os.path.join(save_path, "results", f"results_{run_id}.parquet")
             )
             std_diffs_df.to_parquet(
-                os.path.join(save_path, "std_diffs", f"std_diffs_{run_id}.parquet"),
-                if_exists="append",
-                index=False,
+                os.path.join(save_path, "std_diffs", f"std_diffs_{run_id}.parquet")
             )
             df_loss.to_parquet(
-                os.path.join(save_path, "loss", f"loss_{run_id}.parquet"),
-                if_exists="append",
-                index=False,
+                os.path.join(save_path, "loss", f"loss_{run_id}.parquet")
             )
 
             log.info(f"Finish loading data in {save_path}")
         # Clean memory
-        del cbps, weights, df_results, std_diffs_df
+        del cbps, weights, df_results, std_diffs_df, df_loss
         torch.cuda.empty_cache()
 
     return None
