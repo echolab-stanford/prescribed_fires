@@ -85,6 +85,8 @@ def main(cfg: DictConfig) -> None:
         extra_dict_elements={"land_type": cfg.balancing.land_type},
     )
 
+    log.info("Finish with balancing. All files are saved and CV is done!")
+
 
 if __name__ == "__main__":
     main()
