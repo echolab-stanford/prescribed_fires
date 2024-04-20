@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from .report import report_treatments
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 from ..utils import prepare_template
 
@@ -113,7 +113,7 @@ def fill_treatment_template(
     return treatments
 
 
-def build_lhs(covariates_dict: dict[str, str]) -> pd.DataFrame:
+def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
     """Aux function to build the LHS of the design matrix
 
     Our regressions need DVs! This function uses the template to build the DV and
@@ -125,7 +125,16 @@ def build_lhs(covariates_dict: dict[str, str]) -> pd.DataFrame:
     ----------
         covariates_dict (dict): Path to covariates feather files. The code expects
         a dict with covariate keys. These keys should be "dnbr" or "frp", otherwise
-        an error will be raised.
+        an error will be raised. Since classification is not always desired (imagine
+        using data that is already classified), you can pass an additional parameter
+        in the dictionary: "classify" that can be a boolean. If True, the function
+        will classify the dataset using default thresholds hardcoded in this function.
+
+        An example of the dictionary is:
+        {
+            "dnbr": {"path": "data/dnbr.feather", "classify": False},
+            "frp": {"path": data/frp.feather", "classify": True},
+        }
 
     Returns:
     -------
@@ -145,66 +154,75 @@ def build_lhs(covariates_dict: dict[str, str]) -> pd.DataFrame:
         )
 
     # Load covariates
-    covariates: dict[str, pd.DataFrame] = {
-        key: pd.read_feather(value).drop(columns=["spatial_ref"], errors="ignore")
-        for key, value in covariates_dict.items()
-    }
+    data_dict = {}
+    for key in covariates_dict.keys():
+        data_dict[key] = pd.read_feather(covariates_dict[key]["path"]).drop(
+            columns=["spatial_ref"], errors="ignore"
+        )
 
     # Categorize covariates
-    for key, data in covariates.items():
+    for key, data in data_dict.items():
         if key == "frp":
             if "year" not in data.columns:
                 data["year"] = data.time.dt.year
 
             frp_groupped = data.groupby(["grid_id", "year"], as_index=False).frp.max()
+            if covariates_dict[key]["classify"]:
+                # Find the FRP class from the earliest fire per each grid using the
+                # FRP threshold values (Ichoku et al. 2014):
+                conditions = [
+                    (frp_groupped.frp > 0) & (frp_groupped.frp < 100),
+                    (frp_groupped.frp >= 100) & (frp_groupped.frp < 500),
+                    (frp_groupped.frp >= 500) & (frp_groupped.frp < 1000),
+                    (frp_groupped.frp >= 1000) & (frp_groupped.frp < 1500),
+                    frp_groupped.frp >= 1500,
+                ]
+                choices = [1, 2, 3, 4, 5]
 
-            # Find the FRP class from the earliest fire per each grid using the
-            # FRP threshold values (Ichoku et al. 2014):
-            conditions = [
-                (frp_groupped.frp > 0) & (frp_groupped.frp < 100),
-                (frp_groupped.frp >= 100) & (frp_groupped.frp < 500),
-                (frp_groupped.frp >= 500) & (frp_groupped.frp < 1000),
-                (frp_groupped.frp >= 1000) & (frp_groupped.frp < 1500),
-                frp_groupped.frp >= 1500,
-            ]
-            choices = [1, 2, 3, 4, 5]
-
-            # Asigning FRP class to each fire
-            frp_groupped["class_frp"] = np.select(conditions, choices, default=np.nan)
-            covariates[key] = frp_groupped
+                # Asigning FRP class to each fire
+                frp_groupped["class_frp"] = np.select(
+                    conditions, choices, default=np.nan
+                )
+                data_dict[key] = frp_groupped
 
         elif key == "dnbr":
-            # Scale dnbr to -1 and 1
-            data["dnbr"] = StandardScaler().fit_transform(
-                data["dnbr"].values.reshape(-1, 1)
-            )
-
-            # Find the DNBR class from the earliest fire per each grid using the
-            # DNBR threshold values:
-            conditions = [
-                (data.dnbr < 0),
-                (data.dnbr >= 0) & (data.dnbr < 0.01),
-                (data.dnbr >= 0.01) & (data.dnbr < 0.1),
-                (data.dnbr >= 0.1) & (data.dnbr < 0.15),
-                (data.dnbr >= 0.15) & (data.dnbr < 0.3),
-                data.dnbr >= 0.3,
-            ]
-            choices = [0, 1, 2, 3, 4, 5]
-
-            # Asigning FRP class to each fire
-            data.loc[:, "class_dnbr"] = np.select(conditions, choices, default=np.nan)
+            # Change column type to facilitate merge with frp later
+            data.loc[:, "grid_id"] = data["grid_id"].astype(int)
 
             # Drop weird points (see analysis/weird_points.ipynb)
             data = data[~data.grid_id.isna()]
 
-            # Change column type to facilitate merge with frp later
-            data.loc[:, "grid_id"] = data["grid_id"].astype(int)
-            covariates[key] = data
+            if covariates_dict[key]["classify"]:
+                # Scale dnbr to -1 and 1
+                data["dnbr"] = MinMaxScaler(feature_range=(-1, 1)).fit_transform(
+                    data["dnbr"]["path"].values.reshape(-1, 1)
+                )
+
+                # Find the DNBR class from the earliest fire per each grid using the
+                # DNBR threshold values:
+                conditions = [
+                    (data.dnbr < 0),
+                    (data.dnbr >= 0) & (data.dnbr < 0.01),
+                    (data.dnbr >= 0.01) & (data.dnbr < 0.1),
+                    (data.dnbr >= 0.1) & (data.dnbr < 0.15),
+                    (data.dnbr >= 0.15) & (data.dnbr < 0.3),
+                    data.dnbr >= 0.3,
+                ]
+                choices = [0, 1, 2, 3, 4, 5]
+
+                # Asigning FRP class to each fire
+                data.loc[:, "class_dnbr"] = np.select(
+                    conditions, choices, default=np.nan
+                )
+            else:
+                data.rename(columns={"dnbr": "class_dnbr"}, inplace=True)
+
+            data_dict[key] = data
 
         else:
             raise KeyError(f"Key {key} not found in datasets")
 
-    return covariates
+    return data_dict
 
 
 def treatment_schedule(

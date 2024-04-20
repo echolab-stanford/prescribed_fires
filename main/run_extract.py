@@ -80,6 +80,7 @@ def main(cfg: DictConfig) -> None:
             save_path=cfg.extract.dnbr.save_path,
             feather=cfg.extract.dnbr.feather,
             overwrite=cfg.extract.dnbr.overwrite,
+            classes=cfg.extract.dnbr.classes,
         )
 
     # Process the land type data
