@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Union
 
 import numpy as np
+import odc.geo.xr
 import pandas as pd
 import rioxarray
 import xarray as xr
@@ -69,7 +70,9 @@ def process_dnbr_feather(
     return None
 
 
-def process_dnbr(dnbr_path, template_path, save_path, feather=False, overwrite=False):
+def process_dnbr(
+    dnbr_path, template_path, save_path, feather=False, overwrite=False, classes=False
+):
     """Process DNBR data for template
 
     Process DNBR data (@ 30m resolution) to overlay with a user-defined template.
@@ -94,6 +97,9 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False, overwrite=F
         DNBR data. This is useful for further analysis. Default is False
     overwrite : bool, optional. If True, the function will overwrite existing files.
         This will only work if the NetCDF files are available in the save_path.
+    class: bool, optional
+        Is this a class raster? If it is, then the aggregation into the template
+        should be using a "mode" or "nearest", rather than a "bilinear" interpolation.
 
     Returns
     -------
@@ -101,9 +107,14 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False, overwrite=F
         The function will save a GeoTIFF file for each event in the save_path directory
     """
 
+    # Select interpolation for sampling
+    if classes:
+        resampling_mode = "mode"
+    else:
+        resampling_mode = "bilinear"
+
     # List all files in the directory
     events = list(Path(dnbr_path).glob("*.tif"))
-    print(dnbr_path)
     # Create save path if not exists
     os.makedirs(save_path, exist_ok=True)
 
@@ -115,32 +126,41 @@ def process_dnbr(dnbr_path, template_path, save_path, feather=False, overwrite=F
     dnbr_files = []
     for event in tqdm(events, desc="Processing events..."):
         # Create path to temporary file
-        path_save_file = os.path.join(save_path, f"{event.stem}.nc")
 
-        # Open file using rioxarray
-        event_arr = rioxarray.open_rasterio(event)
+        # Clean stem in case some data comes with additional stuff. We assume in
+        # here that each file is using a 21-long ID like the MTBS ones. Thus, then
+        # we can use the stem to merge with the template
+        stem = event.stem.upper()
 
-        # Only proceed if the file does not exist
-        if not os.path.exists(path_save_file):
-            xr_resampled = (
-                xr_reproject(
-                    event_arr,
-                    geobox=template.geobox,
-                    resampling="bilinear",
-                    dst_nodata=np.nan,
+        if len(stem) == 21:
+            path_save_file = os.path.join(save_path, f"{stem}.nc")
+
+            # Open file using rioxarray
+            event_arr = rioxarray.open_rasterio(event)
+
+            # Only proceed if the file does not exist
+            if not os.path.exists(path_save_file):
+                xr_resampled = (
+                    xr_reproject(
+                        event_arr,
+                        geobox=template.geobox,
+                        resampling=resampling_mode,
+                        dst_nodata=np.nan,
+                    )
+                    .rename({"x": "lon", "y": "lat"})
+                    .drop_vars(["spatial_ref"])
                 )
-                .rename({"x": "lon", "y": "lat"})
-                .drop_vars(["spatial_ref"])
-            )
 
-            xr_resampled.to_netcdf(path_save_file)
+                xr_resampled.to_netcdf(path_save_file)
 
-            if feather:
-                df = xr_resampled.to_dataframe(name="dnbr").dropna().reset_index()
-                df["event_id"] = event.stem
-                dnbr_files.append(df)
+                if feather:
+                    df = xr_resampled.to_dataframe(name="dnbr").dropna().reset_index()
+                    df["event_id"] = stem
+                    dnbr_files.append(df)
+            else:
+                log.info(f"Skipping {stem} as it already exists in temporary directory")
         else:
-            print(f"Skipping {event.stem} as it already exists in temporary directory")
+            log.info(f"Skipping not correct named files: {stem}")
 
     if len(dnbr_files) > 0 and feather:
         process_dnbr_feather(dnbr_files, template_path, save_path)
