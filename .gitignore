@@ -6,8 +6,23 @@
 *.nc
 *.pdf
 *.svg
+*.gif
 *.tif
 *.feather
+*.parquet
+*.shp
+*.shx
+*.dbf
+*.RDS
+*.geojson
+*.json
+
+# Slurm stuff
+*.out
+*.err
+
+# Hydra outputs
+outputs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
