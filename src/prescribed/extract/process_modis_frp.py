@@ -113,26 +113,24 @@ def process_modis_file(
         concat_data = pd.concat(feather_files)
         concat_data = concat_data.merge(template_expanded, on=["lat", "lon", "year"])
 
+        concat_data = concat_data.groupby(["grid_id", "year"], as_index=False).frp.max()
+
+        # Add count of fires per year in a cummulative way
+        concat_data["fire"] = 1
+        concat_data["count_fires"] = concat_data.groupby(["grid_id"]).fire.cumsum()
+        concat_data = concat_data.merge(
+            template_expanded, on=["grid_id", "year"], how="right"
+        )
+
+        # Add fire aggregations and cumsum to get the cumulative frp for all the time
+        concat_data["cum_frp"] = concat_data.groupby(
+            ["grid_id"], as_index=False
+        ).frp.cummax()
+
+        # Forward fill all NAs after merge and fill the rest with 0
+        concat_data.update(concat_data.groupby(["grid_id"]).ffill().fillna(0))
+
         if wide:
-            concat_data = concat_data.groupby(
-                ["grid_id", "year"], as_index=False
-            ).frp.max()
-
-            # Add count of fires per year in a cummulative way
-            concat_data["fire"] = 1
-            concat_data["count_fires"] = concat_data.groupby(["grid_id"]).fire.cumsum()
-            concat_data = concat_data.merge(
-                template_expanded, on=["grid_id", "year"], how="right"
-            )
-
-            # Add fire aggregations and cumsum to get the cumulative frp for all the time
-            concat_data["cum_frp"] = concat_data.groupby(
-                ["grid_id"], as_index=False
-            ).frp.cummax()
-
-            # Forward fill all NAs after merge and fill the rest with 0
-            concat_data.update(concat_data.groupby(["grid_id"]).ffill().fillna(0))
-
             # Pivot the table to wide format and save to feather
             wide_frp = pd.pivot(
                 concat_data,

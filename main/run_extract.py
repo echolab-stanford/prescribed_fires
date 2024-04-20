@@ -11,6 +11,7 @@ from prescribed.extract.process_dnbr import process_dnbr
 from prescribed.extract.process_modis_frp import process_modis_file
 from prescribed.extract.process_prism import process_variables
 from prescribed.extract.process_land_type import process_land_type
+from prescribed.extract.process_emissions import process_emissions
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +89,17 @@ def main(cfg: DictConfig) -> None:
             path=cfg.extract.land_type.path,
             template_path=cfg.template,
             save_path=cfg.extract.land_type.save_path,
+        )
+
+    if "emissions" in data_extract:
+        log.info("Processing emissions")
+        process_emissions(
+            emissions_path=cfg.extract.emissions.path,
+            template_path=cfg.template,
+            save_path=cfg.extract.emissions.save_path,
+            extract_band=cfg.extract.emissions.extract_band,
+            feather=cfg.extract.emissions.feather,
+            overwrite=cfg.extract.emissions.overwrite,
         )
 
 

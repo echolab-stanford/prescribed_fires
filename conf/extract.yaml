@@ -28,6 +28,17 @@ extract:
     save_path: "${save_path}/dnbr"
     feather: true
     overwrite: true
+  dnbr_emissions:
+    path: "${data_path}/dnbr_landsat_c2_l2_buf"
+    save_path: "${save_path}/dnbr"
+    feather: true
+    overwrite: true
+  emissions:
+    path: "${data_path}/emissions/emission_CA"
+    save_path: "${save_path}/emissions_pm25"
+    feather: true
+    extract_band: PM2.5
+    overwrite: false
   disturbances:
     path: "${data_path}/disturbances"
     save_path: "${save_path}/disturbances"
