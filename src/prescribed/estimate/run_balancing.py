@@ -15,6 +15,13 @@ from .cbps_torch import CBPS
 log = logging.getLogger(__name__)
 
 
+def safe_makedirs(path):
+    try:
+        os.makedirs(path)
+    except FileExistsError:
+        pass
+
+
 def run_balancing(
     df: pd.DataFrame,
     focal_year: int,
@@ -166,12 +173,12 @@ def run_balancing(
 
         if save_path:
             if not os.path.exists(save_path):
-                os.makedirs(save_path, exist_ok=True)
+                safe_makedirs(save_path)
 
-            # Create intermediary folders
-            os.makedirs(os.path.join(save_path, "results"), exist_ok=True)
-            os.makedirs(os.path.join(save_path, "std_diffs"), exist_ok=True)
-            os.makedirs(os.path.join(save_path, "loss"), exist_ok=True)
+                # Create intermediary folders
+                safe_makedirs(os.path.join(save_path, "results"))
+                safe_makedirs(os.path.join(save_path, "std_diffs"))
+                safe_makedirs(os.path.join(save_path, "loss"))
 
             df_results.to_parquet(
                 os.path.join(save_path, "results", f"results_{run_id}.parquet")
