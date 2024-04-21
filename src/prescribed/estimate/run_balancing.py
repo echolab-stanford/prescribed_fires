@@ -65,6 +65,10 @@ def run_balancing(
     treat_class = (df[treat_col] * df[class_col]).values
     w = np.where(treat_class == intensity_class, 1, 0)
 
+    # Test that we have treatments!
+    if w.sum() == 0:
+        raise ValueError("No treatments found in the data!")
+
     # Row id using grid_id
     id_col = df[row_id].values
     id_col = id_col[w == 0]
@@ -162,7 +166,7 @@ def run_balancing(
 
         if save_path:
             if not os.path.exists(save_path):
-                os.makedirs(save_path)
+                os.makedirs(save_path, exist_ok=True)
 
             # Create intermediary folders
             os.makedirs(os.path.join(save_path, "results"), exist_ok=True)
