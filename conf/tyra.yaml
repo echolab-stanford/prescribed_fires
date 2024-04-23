@@ -1,0 +1,18 @@
+path_to_results: "/mnt/sherlock/scratch"
+save_path: "best_models"
+
+defaults:
+ - _self_
+ - override hydra/job_logging: disabled
+ - override hydra/hydra_logging: disabled
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+estimate:
+  path_results: 
+    frp_treatment: "${path_to_results}/frp_treatment"
+    dnbr_treatment: "${path_to_results}/dnbr_treatment"
+    dnbr_treat_shrubs: "${path_to_results}/dnbr_treatment_shrubs"
