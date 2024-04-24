@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 import pandas as pd
-import tqdm
+from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ def calculate_estimator(
     outcomes: pd.DataFrame,
     focal_year: int,
     outcome_var: str,
-    low_treatment_class=1,
+    low_treatment_class: list = [2, 1],
     lag_up_to: int = 2021,
 ) -> pd.DataFrame:
     """Calculate lagged effects for a a given focal year
@@ -32,8 +32,8 @@ def calculate_estimator(
         The focal year for which we want to calculate the estimator
     outcome_var : str
         The name of the outcome variable in the `outcomes` dataframe
-    low_treatment_class : int
-        The class of the low treatment
+    low_treatment_class : list
+        The class of the low treatment for [dnbr, frp]. Default is [2, 1]
     lag_up_to : int
         The maximum lag that we want to calculate the estimator
 
@@ -53,20 +53,25 @@ def calculate_estimator(
 
         treatments_year = treatments[["grid_id"] + columns_names_year]
 
-        # Define treatment: exposed pixels * pixel intensity/severity
-        treatments_year.loc[:, "treat"] = (
-            treatments_year[treat_name] * treatments_year[frp_class]
-        )
-        treatments_year.loc[:, "treat"] = np.where(
-            treatments_year["treat"] == low_treatment_class, 1, 0
-        )
-        treatments_year = treatments_year[treatments_year.treat == 1]
+        # Get the means for the treatment grids
+        treat_means = []
+        for column_treat, low_class in zip(
+            [dnbr_class, frp_class], low_treatment_class
+        ):
+            # Define treatment: exposed pixels * pixel intensity/severity
+            treatments_year.loc[:, "treat"] = (
+                treatments_year[treat_name] * treatments_year[column_treat]
+            )
+            treatments_year.loc[:, "treat"] = np.where(
+                treatments_year["treat"] == low_class, 1, 0
+            )
+            treatments_year = treatments_year[treatments_year.treat == 1]
 
-        # Get means for treatment grids
-        outcomes_year = outcomes[
-            outcomes.grid_id.isin(treatments_year.grid_id.tolist())
-        ]
-        treat_means = outcomes_year.groupby("year", as_index=False)[outcome_var].mean()
+            # Get means for treatment grids
+            outcomes_year = outcomes[
+                outcomes.grid_id.isin(treatments_year.grid_id.tolist())
+            ]
+            treat_means.append(outcomes_year.groupby("year")[outcome_var].mean())
 
         # Now, loop over the weights per year and calculate the means for each year outcomes
         control_means_list = []
@@ -96,9 +101,14 @@ def calculate_estimator(
             }
         )
 
-        # Calculate the estimator
+        # Concatenate the results
+        treat_means = pd.concat(treat_means, axis=1).reset_index()
+        treat_means.columns = ["year", "dnbr", "frp"]
         estimator = treat_means.merge(control_means, on="year")
-        estimator["delta"] = estimator[outcome_var] - estimator["control_means"]
+
+        # Calculate esimator for both treatments
+        estimator.loc[:, "delta_dnbr"] = estimator["dnbr"] - estimator["control_means"]
+        estimator.loc[:, "delta_frp"] = estimator["frp"] - estimator["control_means"]
         results.append(estimator)
 
     df = pd.concat(results)

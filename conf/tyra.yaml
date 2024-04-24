@@ -16,3 +16,4 @@ estimate:
     frp_treatment: "${path_to_results}/frp_treatment"
     dnbr_treatment: "${path_to_results}/dnbr_treatment"
     dnbr_treat_shrubs: "${path_to_results}/dnbr_treatment_shrubs"
+    frp_treat_shrubs: "${path_to_results}/frp_treatment_shrubs" 
