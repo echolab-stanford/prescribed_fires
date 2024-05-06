@@ -1,8 +1,9 @@
 import os
+import pdb
+import shutil
 from itertools import chain
 from pathlib import Path
-
-import shutil
+from functools import partial
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -36,14 +37,17 @@ def parallel_resample_vegetation(path_to_dists, ncores, **kwargs):
     -------
     None
     """
+
+    partial_resample_vegetation = partial(resample_vegetation, **kwargs)
+
     Parallel(n_jobs=ncores)(
-        delayed(resample_vegetation)(path, **kwargs) for path in path_to_dists
+        delayed(partial_resample_vegetation)(path) for path in path_to_dists
     )
 
     return None
 
 
-def resample_vegetation(files_path, template_path, temporary_path="resampled"):
+def resample_vegetation(file_path, template_path, save_path="resampled"):
     """Process fractional vegatation data for California.
 
     Process fractional vegetation data (@ 30m resolution) for California. The
@@ -64,15 +68,15 @@ def resample_vegetation(files_path, template_path, temporary_path="resampled"):
 
     Parameters
     ----------
-    files_path : str
+    file_path : str
         Path to the vegetation data. The data should be in a folder as downloaded
     template_path : str
         Path to the template file to reproject to
     save_path : str
         Path to save the processed data to. The function will save the file as a NetCDF
         if a path is passed. The default is not to save
-    temporary_path : str
-        Path to save the temporary files to. The default is "temp"
+    save_path : str
+        Path to save the temporary files to. The default is "resampled"
 
     Returns
     -------
@@ -81,10 +85,7 @@ def resample_vegetation(files_path, template_path, temporary_path="resampled"):
     """
 
     # Create temporary directory
-    os.makedirs(os.path.join(files_path, temporary_path), exist_ok=True)
-
-    # List all files in the directory
-    tiles = list(Path(files_path).glob("*.tif"))
+    os.makedirs(save_path, exist_ok=True)
 
     # Load template details
     template = rasterio.open(template_path)
@@ -93,61 +94,55 @@ def resample_vegetation(files_path, template_path, temporary_path="resampled"):
 
     # Loop through each year file for individual tile file and create a new
     # projected and resampled file in /temp
-    for tile_year in tqdm(tiles, desc="Processing tiles...", position=0):
-        # Create path to temporary file
-        path_temp_file = os.path.join(
-            files_path, temporary_path, f"{tile_year.stem}.tif"
-        )
+    # Create path to temporary file
+    path_temp_file = os.path.join(save_path, f"{file_path.stem}.tif")
 
-        # Only proceed if the file does not exist
-        if not os.path.exists(path_temp_file):
-            with rasterio.open(tile_year) as src:
-                # Load meta
-                meta = src.meta
+    # Only proceed if the file does not exist
+    if not os.path.exists(path_temp_file):
+        with rasterio.open(file_path) as src:
+            # Load meta
+            meta = src.meta
 
-                # Calculate bounds and transform for template
-                transform, width, height = calculate_default_transform(
-                    src.crs,
-                    template_meta["crs"],
-                    src.width,
-                    src.height,
-                    *src.bounds,
-                    resolution=resolution,
-                )
-
-                # Update meta with new bounds and transform for the old source
-                kwargs = src.meta.copy()
-                kwargs.update(
-                    {
-                        "crs": template_meta["crs"],
-                        "transform": transform,
-                        "width": width,
-                        "height": height,
-                    }
-                )
-
-                # Resample data to template projection and grid and save to temporary file
-                with rasterio.open(path_temp_file, "w", **kwargs) as dst:
-                    for i in tqdm(
-                        range(1, src.count + 1),
-                        position=1,
-                        desc="Resampling bands...",
-                    ):
-                        reproject(
-                            source=rasterio.band(src, i),
-                            destination=rasterio.band(dst, i),
-                            src_transform=src.transform,
-                            src_crs=meta["crs"],
-                            src_nodata=meta["nodata"],
-                            dst_nodata=meta["nodata"],
-                            num_threads=5,  # TODO: Make this an option
-                            dst_crs=template_meta["crs"],
-                            resampling=Resampling.lanczos,
-                        )
-        else:
-            print(
-                f"Skipping {tile_year.stem} as it already exists in temporary directory"
+            # Calculate bounds and transform for template
+            transform, width, height = calculate_default_transform(
+                src.crs,
+                template_meta["crs"],
+                src.width,
+                src.height,
+                *src.bounds,
+                resolution=resolution,
             )
+
+            # Update meta with new bounds and transform for the old source
+            kwargs = src.meta.copy()
+            kwargs.update(
+                {
+                    "crs": template_meta["crs"],
+                    "transform": transform,
+                    "width": width,
+                    "height": height,
+                }
+            )
+
+            # Resample data to template projection and grid and save to temporary file
+            with rasterio.open(path_temp_file, "w", **kwargs) as dst:
+                for i in tqdm(
+                    range(1, src.count + 1),
+                    desc=f"Resampling bands for year {file_path.stem.split('_')[-1]}...",
+                    position=1,
+                ):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=meta["crs"],
+                        src_nodata=meta["nodata"],
+                        dst_nodata=meta["nodata"],
+                        dst_crs=template_meta["crs"],
+                        resampling=Resampling.lanczos,
+                    )
+    else:
+        print(f"Skipping {file_path.stem} as it already exists in temporary directory")
 
     return None
 
@@ -207,7 +202,7 @@ def process_vegetation(
     cats = {1: "tree", 2: "shrub", 3: "herbaceous", 4: "bare"}
 
     # Load template details
-    template = rasterio.open(template_path)
+    template = rioxarray.open_rasterio(template_path)  # just because
 
     # List all files in the directory
     tiles = [p for p in Path(files_path).glob("*") if p.is_dir()]
@@ -257,12 +252,12 @@ def process_vegetation(
 
     # Parallel process the mosaicing of the data
     list_mosaics = list(Path(os.path.join(save_path, "big_mosaics")).glob("*.tif"))
-    parallel_resample_vegetation(
-        list_mosaics,
-        ncores=len(list_mosaics) if ncores == -1 else ncores,
-        template_path=template_path,
-        save_path=os.path.join(save_path, "resampled"),
-    )
+
+    for path in list_mosaics:
+        print(f"Processing {path.stem}...")
+        resample_vegetation(
+            path, template_path, save_path=os.path.join(save_path, "resampled")
+        )
 
     # List all resampled rasters to mask
     resampled_files = list(Path(os.path.join(save_path, "resampled")).glob("*.tif"))
@@ -270,7 +265,7 @@ def process_vegetation(
     year_mosaics = []
     for m_year in resampled_files:
         arr = rioxarray.open_rasterio(m_year)
-        arr = arr.expand_dims(year=m_year.stem.split("_")[-1])
+        arr = arr.expand_dims({"year": [m_year.stem.split("_")[-1]]})
         year_mosaics.append(arr)
 
     mosaic = xr.concat(year_mosaics, dim="year")
@@ -281,16 +276,16 @@ def process_vegetation(
         shape_mask = gpd.read_file(shape_mask)
 
     clipped = mosaic.rio.clip(
-        shape_mask.geometry, shape_mask.crs, drop=True, invert=False
+        shape_mask.geometry.values, shape_mask.crs, drop=True, invert=False
     )
 
     xr_resampled = xr_reproject(
         clipped,
         geobox=template.geobox,
-        resampling="bilinear",
+        resampling="nearest",
         dst_nodata=arr.attrs["_FillValue"],
     )
-
+    pdb.set_trace()
     xr_resampled = xr.where(
         xr_resampled >= arr.attrs["_FillValue"], np.nan, xr_resampled
     ).rename({"x": "lon", "y": "lat"})
@@ -308,7 +303,7 @@ def process_vegetation(
         # Transform to dataframe
         template_expanded = (
             prepare_template(template_path).groupby("grid_id", as_index=False).first()
-        )
+        ).drop(columns=["year"])
 
         df_resampled = xr_resampled.to_dataframe(name="coverage").reset_index().dropna()
 
@@ -324,7 +319,7 @@ def process_vegetation(
         # Pivot to get bands as column by coverage
         pivot_coverage_columns = pd.pivot(
             df_resampled,
-            index=["grid_id", " year", "lat", "lon"],
+            index=["grid_id", "year", "lat", "lon"],
             columns="band",
             values="coverage",
         )
