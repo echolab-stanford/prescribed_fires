@@ -54,4 +54,5 @@ extract:
     save_path: "${save_path}/vegetation"
     feather: true
     wide: true
-    clean: true
+    clean: false
+    ncores: 15

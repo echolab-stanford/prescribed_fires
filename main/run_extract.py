@@ -12,6 +12,7 @@ from prescribed.extract.process_modis_frp import process_modis_file
 from prescribed.extract.process_prism import process_variables
 from prescribed.extract.process_land_type import process_land_type
 from prescribed.extract.process_emissions import process_emissions
+from prescribed.extract.process_nvdi import process_vegetation
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +102,17 @@ def main(cfg: DictConfig) -> None:
             extract_band=cfg.extract.emissions.extract_band,
             feather=cfg.extract.emissions.feather,
             overwrite=cfg.extract.emissions.overwrite,
+        )
+
+    if "frac_veg" in data_extract:
+        process_vegetation(
+            files_path=cfg.extract.frac_veg.path,
+            template_path=cfg.template,
+            shape_mask=cfg.shape_mask,
+            save_path=cfg.extract.frac_veg.save_path,
+            feather=cfg.extract.frac_veg.feather,
+            wide=cfg.extract.frac_veg.wide,
+            clean=cfg.extract.frac_veg.clean,
         )
 
 

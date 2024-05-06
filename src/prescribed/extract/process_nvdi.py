@@ -285,7 +285,7 @@ def process_vegetation(
         resampling="nearest",
         dst_nodata=arr.attrs["_FillValue"],
     )
-    pdb.set_trace()
+
     xr_resampled = xr.where(
         xr_resampled >= arr.attrs["_FillValue"], np.nan, xr_resampled
     ).rename({"x": "lon", "y": "lat"})
@@ -313,7 +313,8 @@ def process_vegetation(
         # `xr_reproject`. We want consistency, so we keep them away and always follow
         # the template. See `analysis/weird_points.ipynb` to see the issue.
         df_resampled = df_resampled.merge(
-            template_expanded, on=["lat", "lon"], how="right"
+            template_expanded,
+            on=["lat", "lon"],
         ).drop(columns=["spatial_ref"])
 
         # Pivot to get bands as column by coverage
