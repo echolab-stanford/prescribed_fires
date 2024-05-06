@@ -1,8 +1,8 @@
 import os
-import shutil
 from itertools import chain
 from pathlib import Path
 
+import shutil
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -43,34 +43,7 @@ def parallel_resample_vegetation(path_to_dists, ncores, **kwargs):
     return None
 
 
-def parallel_mosaic_processing(tiles, ncores, **kwargs):
-    """Parallel wrapper for the mosaic_processing function.
-
-    Function to parallelize the mosaic_processing function using joblib.
-
-    Parameters
-    ----------
-    tiles : dict
-        Dict with paths as a list to the files to process with a key:
-        {2004: [<path>, ..., <path>], 2005: [<path>, ..., <path>], ...}
-    ncores : int
-        Number of cores to use for parallel processing
-    **kwargs : dict
-        Additional arguments to pass to the mosaic_processing function
-
-    Returns
-    -------
-        None
-    """
-
-    Parallel(n_jobs=ncores)(
-        delayed(mosaic_processing)(tile, year, **kwargs) for year, tile in tiles.items()
-    )
-
-    return None
-
-
-def resample_vegetation(files_path, template_path, temporary_path="temp"):
+def resample_vegetation(files_path, template_path, temporary_path="resampled"):
     """Process fractional vegatation data for California.
 
     Process fractional vegetation data (@ 30m resolution) for California. The
@@ -179,115 +152,66 @@ def resample_vegetation(files_path, template_path, temporary_path="temp"):
     return None
 
 
-def mosaic_processing(
-    tile_list, key, template_bounds, template_meta, temporary_path="mosaics"
-):
-    """Process list of GeoTIFF files and merge them into a single file as as mosaic
-
-    This function process a list of closed or opened GeoTiffs using rasterio and
-    merge them into a single mosaic file per year without any masking. This function
-    meants to be run in parallel with the `parallel_mosaic_processing`
-
-    Parameters
-    ----------
-    tile_list : list
-        List of rasterio opened files to merge
-    key : str
-        Key to use to save the file. We use a dict by year, so ideally is a year string.
-    template_bounds : tuple
-        Bounds of the template file to merge the data to
-    template_meta : dict
-        Template metadata. This is `rasterio.open(template_path).meta`
-    temporary_path : str
-        Path to save the temporary files to. The default is "mosaics"
-
-    Returns
-    -------
-    None
-        Saves file to temporary directory
-    """
-
-    # Fractional vegetation categories
-    # 1:tree, 2: shrub 3: herbaceous and 4: bare
-    # cats = {1: "tree", 2: "shrub", 3: "herbaceous", 4: "bare"}
-
-    # Check saving folder
-    if not os.path.exists(temporary_path):
-        os.makedirs(temporary_path, exist_ok=True)
-
-    tiles_open = [rasterio.open(tile) for tile in tile_list]
-
-    # Merge tiles
-    mosaic, transform = merge(
-        tiles_open,
-        bounds=template_bounds,
-        resampling=Resampling.lanczos,
-    )
-
-    # Save mosaic in the temporary directory as a GeoTIFF. Update dict to keep
-    # the important metadata from the original files.
-
-    # Update metadata
-    out_meta = tiles_open[0].meta.copy()
-    out_meta.update(
-        {
-            "driver": "GTiff",
-            "height": mosaic.shape[1],
-            "width": mosaic.shape[2],
-            "transform": transform,
-            "crs": template_meta["crs"],
-        }
-    )
-
-    with rasterio.open(
-        os.path.join(temporary_path, f"mosaic_{key}.tif"), "w", **out_meta
-    ) as dst:
-        dst.write(mosaic)
-
-    return None
-
-
 def process_vegetation(
     files_path,
     template_path,
-    ncores,
     save_path,
     shape_mask,
+    feather,
     wide,
-    clean,
-    **kwargs,
+    ncores=-1,
+    clean=True,
 ):
     """Process vegetation data for California across tiles and years
 
-    Function to process vegetation data for California across tiles and years.
+    Function to process vegetation data for California across tiles and years. This function will read in the data, and fix it to a template. Notice that this implies that the data will be transformed and aggregated to a coarser resolution. In all operations we use a `laczos` interpolation and we clip all tile data by year into temporary mosaic files.
+
+    Steps:
+    1. Read the data
+    2. Mosaic images by year using native resolution
+    3. Reproject and resample the data to a template
+    4. Clip the data to the shapefile mask
+    5. Save the data to a feather file and NetCDF
+
+    We use some multiprocessing to resample big mosaics, the `ncores` option tells the function how many cores to use. If `-1` is passed, the function will use equal number of cores as number of years in the data, this is a good rule of thumb.
+
+    This function will create different intermediate temporary files, if you don't want to keep any of these, you can use the `clean` option.
 
     Parameters
     ----------
     files_path : str
         Path to the vegetation data. The data should be in a folder as downloaded
+    template_path : str
+        Path to the template file to reproject to
+    save_path : str
+        Path to save the processed data to. The function will save the file as a NetCDF
+        if a path is passed. The default is not to save
+    shape_mask : str
+        Path to the shapefile mask to clip the data to
+    feather : bool
+        If True, save all data as a single feather file in long format, unless wide is True. In that case it will save both file in feather format.
+    wide : bool
+        If True, save the data in wide format. The file will have the `_wide` suffix. By default the data is saved in long format.
     ncores : int
-        Number of cores to use for parallel processing
-    **kwargs : dict
-        Additional arguments to pass to the resample_vegetation function
+        Number of cores to use for parallel processing. The default is -1, which will use the number of years in the data.
+    clean : bool
+        If True, remove all temporary files created during the process. The default is True.
 
     Returns
     -------
-    None
+    xr.DataArray
+        Fractional vegetation data as an xarray
     """
+
+    # Fractional vegetation categories
+    cats = {1: "tree", 2: "shrub", 3: "herbaceous", 4: "bare"}
 
     # Load template details
     template = rasterio.open(template_path)
-    template_meta = template.meta
-    template_bounds = template.bounds
 
     # List all files in the directory
     tiles = [p for p in Path(files_path).glob("*") if p.is_dir()]
-
-    # Parallel process the resampling of the data
-    parallel_resample_vegetation(tiles, ncores, **kwargs)
-
-    temp_dirs = list(Path(files_path).rglob("temp"))
-    temp_files = [list(p.glob("*.tif")) for p in temp_dirs]
+    temp_files = [list(p.glob("*.tif")) for p in tiles]
 
     # Get all files in the same list
     all_files = list(chain(*temp_files))
@@ -297,38 +221,87 @@ def process_vegetation(
         files_year = [f for f in all_files if str(year) in f.stem]
         dict_years[year] = files_year
 
+    if not os.path.exists(os.path.join(save_path, "big_mosaics")):
+        os.makedirs(os.path.join(save_path, "big_mosaics"), exist_ok=True)
+
+    for year, files in tqdm(dict_years.items(), desc="Processing years...", position=0):
+        # Save file
+        save_file = os.path.join(save_path, "big_mosaics", f"year_mosaic_{year}.tif")
+        if not os.path.exists(save_file):
+            tiles_open = [rasterio.open(tile) for tile in files]
+
+            # Merge tiles and save result as a GeoTIFF
+            mosaic, transform = merge(
+                tiles_open, method="first", target_aligned_pixels=True
+            )
+
+            out_meta = tiles_open[0].meta.copy()
+            out_meta.update(
+                {
+                    "height": mosaic.shape[1],
+                    "width": mosaic.shape[2],
+                    "transform": transform,
+                    "driver": "GTiff",
+                }
+            )
+
+            with rasterio.open(
+                save_file,
+                "w",
+                **out_meta,
+                tiled=True,
+                blockxsize=4096,
+                blockysize=4096,
+            ) as dest:
+                dest.write(mosaic)
+
     # Parallel process the mosaicing of the data
-    parallel_mosaic_processing(dict_years, ncores, template_bounds, template_meta)
+    list_mosaics = list(Path(os.path.join(save_path, "big_mosaics")).glob("*.tif"))
+    parallel_resample_vegetation(
+        list_mosaics,
+        ncores=len(list_mosaics) if ncores == -1 else ncores,
+        template_path=template_path,
+        save_path=os.path.join(save_path, "resampled"),
+    )
+
+    # List all resampled rasters to mask
+    resampled_files = list(Path(os.path.join(save_path, "resampled")).glob("*.tif"))
+
+    year_mosaics = []
+    for m_year in resampled_files:
+        arr = rioxarray.open_rasterio(m_year)
+        arr = arr.expand_dims(year=m_year.stem.split("_")[-1])
+        year_mosaics.append(arr)
+
+    mosaic = xr.concat(year_mosaics, dim="year")
 
     # Open mosaic again and mask for the shapefile mask if passed
     # Load shapefile is a string path is passed
     if isinstance(shape_mask, str):
         shape_mask = gpd.read_file(shape_mask)
 
-    # Load all mosaics as arrays
-    mosaic_files = list(Path(os.path.join(save_path, "mosaics")).glob("*.tif"))
-
-    year_mosaics = []
-    for m_year in mosaic_files:
-        arr = rioxarray.open_rasterio(m_year)
-        arr = arr.expand_dims(year=[m_year.stem.split("_")[-1].split(".")[0]])
-        year_mosaics.append(arr)
-
-    mosaic = xr.concat(year_mosaics, dim="year")
+    clipped = mosaic.rio.clip(
+        shape_mask.geometry, shape_mask.crs, drop=True, invert=False
+    )
 
     xr_resampled = xr_reproject(
-        mosaic,
+        clipped,
         geobox=template.geobox,
         resampling="bilinear",
         dst_nodata=arr.attrs["_FillValue"],
     )
 
-    xr_resampled = xr.where(xr_resampled >= 254, np.nan, xr_resampled).rename(
-        {"x": "lon", "y": "lat"}
-    )
+    xr_resampled = xr.where(
+        xr_resampled >= arr.attrs["_FillValue"], np.nan, xr_resampled
+    ).rename({"x": "lon", "y": "lat"})
+
+    # Coverage data is stored as integers. If we use a scale factor of 100, the
+    # fraction is from 0 to 100. We want to store coverage as a percentage from
+    # 0 to 1, so we use 10000 as a scale factor
+    xr_resampled = xr_resampled / 10000
 
     # Save data if saved is passed
-    if save_path:
+    if feather:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
@@ -340,28 +313,32 @@ def process_vegetation(
         df_resampled = xr_resampled.to_dataframe(name="coverage").reset_index().dropna()
 
         # Merge with template
-        df_resampled = df_resampled.merge(template_expanded, on=["lat", "lon"]).drop(
-            columns=["year", "band", "spatial_ref"]
-        )
+        # As other merges with template, remember that is possible to have less rows
+        # because of the water pixels and the coastal pixels that are moved in the
+        # `xr_reproject`. We want consistency, so we keep them away and always follow
+        # the template. See `analysis/weird_points.ipynb` to see the issue.
+        df_resampled = df_resampled.merge(
+            template_expanded, on=["lat", "lon"], how="right"
+        ).drop(columns=["spatial_ref"])
 
         # Pivot to get bands as column by coverage
         pivot_coverage_columns = pd.pivot(
             df_resampled,
-            index="grid_id",
+            index=["grid_id", " year", "lat", "lon"],
             columns="band",
             values="coverage",
         )
 
         pivot_coverage_columns.columns = [
-            f"{i}_{j.strftime('%Y_%m')}" for i, j in pivot_coverage_columns.columns
+            f"frac_cover_{cats[f]}" for f in pivot_coverage_columns.columns
         ]
 
         if wide:
             dist_pivot = pd.pivot(
-                df_resampled,
+                pivot_coverage_columns.reset_index(),
                 index="grid_id",
                 columns="year",
-                values=[col for col in df_resampled.columns if "disturbances" in col],
+                values=[col for col in df_resampled.columns if "frac_cover" in col],
             ).astype(int)
 
             # Change column names from multiindex to flat
@@ -369,9 +346,18 @@ def process_vegetation(
             dist_pivot.reset_index(inplace=True)
 
             # Save data to feather
-            dist_pivot.to_feather(os.path.join(save_path, "disturbances_wide.feather"))
+            dist_pivot.to_feather(
+                os.path.join(save_path, "frac_vegetation_wide.feather")
+            )
 
         # Save data
-        arr.to_netcdf(os.path.join(save_path, "disturbances.nc"))
+        pivot_coverage_columns.reset_index().to_feather(
+            os.path.join(save_path, "frac_vegetation_long.feather")
+        )
+        xr_resampled.to_netcdf(os.path.join(save_path, "frac_vegetation.nc"))
 
-    return arr
+    if clean:
+        shutil.rmtree(os.path.join(files_path, "resampled"))
+        shutil.rmtree(os.path.join(files_path, "big_mosaics"))
+
+    return xr_resampled

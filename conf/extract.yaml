@@ -49,3 +49,9 @@ extract:
   land_type:
     path: "${data_path}/US_105_EVT/Tif/us_105evt_physio.tif"
     save_path: "${save_path}/land_type"
+  frac_veg:
+    path: "${data_path}/vegetation"
+    save_path: "${save_path}/vegetation"
+    feather: true
+    wide: true
+    clean: true
