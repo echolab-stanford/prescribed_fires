@@ -1,5 +1,4 @@
 import os
-import pdb
 import shutil
 from itertools import chain
 from pathlib import Path
@@ -334,8 +333,10 @@ def process_vegetation(
                 pivot_coverage_columns.reset_index(),
                 index="grid_id",
                 columns="year",
-                values=[col for col in df_resampled.columns if "frac_cover" in col],
-            ).astype(int)
+                values=[
+                    col for col in pivot_coverage_columns.columns if "frac_cover" in col
+                ],
+            )
 
             # Change column names from multiindex to flat
             dist_pivot.columns = [f"{i}_{j}" for i, j in dist_pivot.columns]
