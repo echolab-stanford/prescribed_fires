@@ -98,6 +98,8 @@ And then running the experiments in `main` with the defined configuration files 
 | DEM            | Digital Elevation Model (slope is calculated by us)[^2] |     -     |       [Paper][6]        |
 | Disturbances   | Disturbance Agents in California                        | 1987-2021 |     [Dataverse][7]      |
 | Forest Cover   | NVDI calculation from Landsat Collection 2              | 1987-2022 | [Planetary Computer][4] |
+| Emissions  (1 km$^2$) | Fire Inventory Network from NCAR (FINN)                 | 2012-2022 | [NCAR][11]       |
+| Emissions  (0.1 deg) | Fire Inventory Network from NCAR (FINN)                 | 2001-2022 | [NCAR][11]       |
 
 [^1]: See our own library [`dnbr_extract`][9] that follows an offset calculation of the NBR index.
 [^2]: The DEM variables are calculated using the `xarray-spatial` algorithms.
@@ -117,3 +119,4 @@ See the amazing libraries that we rely on to do this work:
 [8]: https://prism.oregonstate.edu/
 [9]: https://github.com/echolab-stanford/dnbr_extract
 [10]: https://hydra.cc/docs/advanced/override_grammar/basic/
+[11]: https://www2.acom.ucar.edu/modeling/finn-fire-inventory-ncar
