@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -8,8 +9,11 @@ import pandas as pd
 import rioxarray
 import xarray as xr
 from geocube.api.core import make_geocube
-from geocube.rasterize import rasterize_points_griddata
 from tqdm import tqdm
+
+from ..utils import prepare_template
+
+logger = logging.getLogger(__name__)
 
 
 def process_finn(
@@ -17,9 +21,10 @@ def process_finn(
     template: Union[str, xr.DataArray],
     aoi: Union[str, gpd.GeoDataFrame],
     save_path: str,
+    save_agg: Optional[bool] = False,
     inventory: str = "GEOSCHEM",
     species: Optional[str] = None,
-) -> None:
+) -> Union[pd.DataFrame, xr.Dataset]:
     """Process emissions data from FINN
 
     This function processes emissions data from NCAR Fire Emissions Inventory
@@ -30,6 +35,8 @@ def process_finn(
         List of paths to the files to process
     save_path : str
         Path to save the resulting output
+    save_agg : bool
+        If True, the function will save the aggregated emissions to a file. Default is False
     aoi : str or gpd.GeoDataFrame
         Path to the crosswalk file (shapefile) or a GeoDataFrame
     template : str
@@ -41,8 +48,8 @@ def process_finn(
 
     Returns
     -------
-    None
-        Saves yearly NetCDF files with the processed data
+    pd.DataFrame or xr.Dataset
+        If save_agg is True, the function will return a DataFrame with the aggregated emissions. Otherwise, it will return a xarray Dataset with the emissions data.
     """
 
     all_species: List[str] = [
@@ -81,7 +88,6 @@ def process_finn(
         "TOLU",
         "XYLE",
         "NO_1",
-        "date",
     ]
 
     if not isinstance(files_path, list):
@@ -95,61 +101,99 @@ def process_finn(
     if isinstance(aoi, str):
         aoi = gpd.read_file(aoi)
 
+    # Store in mem if no saving
+    if not save_path:
+        list_files = []
+
     for file in tqdm(file_list, desc=f"Processing the {inventory}", position=0):
         # Get year from file name
         # This is relying in NCAR's naming convention. For example:
         # FINNv2.5_modvrs_{inventory}_{year}_c20211213.txt.gz
         year: int = file.stem.split("_")[3]
 
-        # Why pandas when you have duckdb? :D (I'm kidding, I love pandas)
-        data: pd.DataFrame = duckdb.query(
-            f"SELECT * FROM read_csv('{file}', header = true, auto_detect=true)"
-        ).to_df()
+        if not os.path.exists(os.path.join(save_path, f"finn_{inventory}_{year}.nc")):
+            # Why pandas when you have duckdb? :D (I'm kidding, I love pandas)
+            data: pd.DataFrame = duckdb.query(
+                f"SELECT * FROM read_csv('{file}', header = true, auto_detect=true)"
+            ).to_df()
 
-        # Get correct year dates
-        data["date"] = data["DAY"].apply(lambda x: f"{year}-{x}")
-        data["date"] = pd.to_datetime(data["date"], format="%Y-%j")
+            # Get correct year dates
+            data["date"] = data["DAY"].apply(lambda x: f"{year}-{x}")
+            data["date"] = pd.to_datetime(data["date"], format="%Y-%j")
 
-        # Create geodataframe
-        emissions: gpd.GeoDataFrame = gpd.GeoDataFrame(
-            data,
-            geometry=gpd.points_from_xy(data["LONGI"], data["LATI"]),
-            crs="EPSG:4326",
-        )
-
-        # Reproject data to the aoi crs
-        emissions = emissions.to_crs(aoi.crs)
-
-        # Subset data to only include points in the AOI
-        emissions = gpd.sjoin(emissions, aoi, how="inner")
-
-        # Create cube by day
-        emissions_doy_arr = []
-        for doy in tqdm(
-            emissions["date"].unique(),
-            desc=f"Processing days [year: {year}]",
-            position=1,
-        ):
-            cube: xr.DataArray = make_geocube(
-                vector_data=emissions[emissions["date"] == doy],
-                measurements=all_species if species is None else species,
-                like=template,
+            # Create geodataframe
+            emissions: gpd.GeoDataFrame = gpd.GeoDataFrame(
+                data,
+                geometry=gpd.points_from_xy(data["LONGI"], data["LATI"]),
+                crs="EPSG:4326",
             )
-            cube = cube.expand_dims({"time": [doy]})
-            emissions_doy_arr.append(cube)
 
-        # Concatenate all the arrays by day
-        cube: xr.Dataset = xr.concat(emissions_doy_arr, dim="time")
+            # Reproject data to the aoi crs
+            emissions = emissions.to_crs(aoi.crs)
 
-        if save_path:
-            # Create save path if it does not exist
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
+            # Subset data to only include points in the AOI
+            emissions = gpd.sjoin(emissions, aoi, how="inner")
 
-            # Save yearly NetCDF file
-            cube.to_netcdf(os.path.join(save_path, f"finn_{inventory}_{year}.nc"))
+            # Create cube by day
+            emissions_doy_arr = []
+            for doy in tqdm(
+                emissions["date"].unique(),
+                desc=f"Processing days [year: {year}]",
+                position=1,
+            ):
+                cube: xr.DataArray = make_geocube(
+                    vector_data=emissions[emissions["date"] == doy],
+                    measurements=all_species if species is None else species,
+                    like=template,
+                )
+                cube = cube.expand_dims({"time": [doy]})
+                emissions_doy_arr.append(cube)
 
-    return None
+            # Concatenate all the arrays by day
+            cube: xr.Dataset = xr.concat(emissions_doy_arr, dim="time")
+
+            if save_path:
+                # Create save path if it does not exist
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+
+                # Save yearly NetCDF file
+                cube.to_netcdf(os.path.join(save_path, f"finn_{inventory}_{year}.nc"))
+            else:
+                return list_files.append(cube)
+        else:
+            logging.info(f"File for year {year} already exists. Skipping.")
+
+    if save_agg:
+        files = list(Path(save_path).glob("*.nc"))
+
+        # Create aggregated emissions
+        xarr = xr.open_mfdataset(files)
+
+        # If using aerosols, data is aggregated at the kg/day level. Thus with the mean along time we are taking the sum of the year by day
+        agg = xarr.mean(dim="time")
+        agg_df = agg.to_dataframe().reset_index().drop(columns=["spatial_ref"]).dropna()
+
+        try:
+            template_df = prepare_template(template).groupby("grid_id").first()
+        except ValueError as e:
+            raise ValueError(
+                (
+                    "You need to pass a path to the template as we are expecting that for the",
+                    f"aggregation. [{e}]",
+                )
+            )
+
+        # Merge template with the aggregated data
+        agg_df = template_df.merge(agg_df, on="grid_id")
+        agg_df.to_feather(os.path.join(save_path, f"finn_{inventory}_agg.feater"))
+
+        return agg_df
+
+    else:
+        cube = xr.concat(list_files, dim="time")
+
+    return cube
 
 
 def aggregate_finn_fires(
