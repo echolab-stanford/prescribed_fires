@@ -1,8 +1,8 @@
 import logging
-
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ def calculate_estimator(
     outcome_var: str,
     low_treatment_class: list = [2, 1],
     lag_up_to: int = 2021,
+    scale: Optional[float] = False,
 ) -> pd.DataFrame:
     """Calculate lagged effects for a a given focal year
 
@@ -75,7 +76,7 @@ def calculate_estimator(
 
         # Now, loop over the weights per year and calculate the means for each year outcomes
         control_means_list = []
-        lags_arr = np.arange(focal_year, lag_up_to)
+        lags_arr = np.arange(focal_year + 1, lag_up_to)
         for year in lags_arr:
             weights_year = weights[weights.focal_year == year]
             outcomes_control = outcomes[
@@ -109,6 +110,12 @@ def calculate_estimator(
         # Calculate esimator for both treatments
         estimator.loc[:, "delta_dnbr"] = estimator["dnbr"] - estimator["control_means"]
         estimator.loc[:, "delta_frp"] = estimator["frp"] - estimator["control_means"]
+
+        # Scale the estimator
+        if scale:
+            estimator.loc[:, "delta_dnbr"] = estimator["delta_dnbr"] * scale
+            estimator.loc[:, "delta_frp"] = estimator["delta_frp"] * scale
+
         results.append(estimator)
 
     df = pd.concat(results)
