@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import List, Union
 
 import numpy as np
-import odc.geo.xr
 import pandas as pd
 import rioxarray
 import xarray as xr

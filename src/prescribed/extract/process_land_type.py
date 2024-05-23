@@ -41,4 +41,5 @@ def process_land_type(path: str, template_path: str, save_path: str):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
+    xr_resampled.to_netcdf(os.path.join(save_path, "land_type.nc"))
     df_resampled.to_feather(os.path.join(save_path, "land_type.feather"))

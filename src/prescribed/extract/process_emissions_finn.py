@@ -1,10 +1,11 @@
-import os
 import logging
+import os
 from pathlib import Path
 from typing import List, Optional, Union
 
 import duckdb
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import rioxarray
 import xarray as xr
@@ -18,16 +19,21 @@ logger = logging.getLogger(__name__)
 
 def process_finn(
     files_path: Union[str, list],
-    template: Union[str, xr.DataArray],
+    template_path: Union[str, xr.DataArray],
     aoi: Union[str, gpd.GeoDataFrame],
     save_path: str,
     save_agg: Optional[bool] = False,
+    agg_fun: Optional[str] = "mean",
     inventory: str = "GEOSCHEM",
     species: Optional[str] = None,
 ) -> Union[pd.DataFrame, xr.Dataset]:
     """Process emissions data from FINN
 
-    This function processes emissions data from NCAR Fire Emissions Inventory
+    This function processes emissions data from NCAR Fire Emissions Inventory and saves several files:
+     - Individual NetCDF files per file using the AOI to subset the data
+     - Aggregated emissions to a feather file if using the `save_agg` option
+
+    The aggregation of data is using the average of the emissions per day. The FINN aerosols are using kg/day units, thus the mean will get the average emissions per day. Alternatively, you can use the `np.sum`.
 
     Parameters
     ----------
@@ -39,9 +45,9 @@ def process_finn(
         If True, the function will save the aggregated emissions to a file. Default is False
     aoi : str or gpd.GeoDataFrame
         Path to the crosswalk file (shapefile) or a GeoDataFrame
-    template : str
+    template_path : str
         Path to the template file to reproject to
-    inventory : str
+    inventory : str or xr.DataArray
         Inventory to process. Default is GEOSCHEM if a list of files is provided. Otherwise, the function won't check if the files correspond to a specific inventory.
     species : list
         List of species to process. Default is None, which processes all species
@@ -51,6 +57,12 @@ def process_finn(
     pd.DataFrame or xr.Dataset
         If save_agg is True, the function will return a DataFrame with the aggregated emissions. Otherwise, it will return a xarray Dataset with the emissions data.
     """
+
+    agg_funs = {
+        "mean": np.nanmean,
+        "sum": np.nansum,
+        "max": np.nanmax,
+    }
 
     all_species: List[str] = [
         "CO2",
@@ -95,14 +107,14 @@ def process_finn(
     else:
         file_list = files_path
 
-    if isinstance(template, str):
-        template = rioxarray.open_rasterio(template)
+    if isinstance(template_path, str):
+        template = rioxarray.open_rasterio(template_path)
 
     if isinstance(aoi, str):
         aoi = gpd.read_file(aoi)
 
     # Store in mem if no saving
-    if not save_path:
+    if not save_path or save_agg:
         list_files = []
 
     for file in tqdm(file_list, desc=f"Processing the {inventory}", position=0):
@@ -170,12 +182,23 @@ def process_finn(
         # Create aggregated emissions
         xarr = xr.open_mfdataset(files)
 
-        # If using aerosols, data is aggregated at the kg/day level. Thus with the mean along time we are taking the sum of the year by day
-        agg = xarr.mean(dim="time")
+        # If using aerosols, data is aggregated at the kg/day level. Thus with the mean along time # we are taking the sum of the year by day. You can have different interpretations
+        # depending on the aggregation function choice
+        agg = (
+            xarr.resample(time="1Y")
+            .reduce(agg_funs[agg_fun])
+            .rename({"x": "lon", "y": "lat"})
+        )
         agg_df = agg.to_dataframe().reset_index().drop(columns=["spatial_ref"]).dropna()
 
         try:
-            template_df = prepare_template(template).groupby("grid_id").first()
+            template_df = (
+                prepare_template(template_path)
+                .groupby("grid_id")
+                .first()
+                .reset_index()
+                .drop(columns=["year"])
+            )
         except ValueError as e:
             raise ValueError(
                 (
@@ -185,8 +208,10 @@ def process_finn(
             )
 
         # Merge template with the aggregated data
-        agg_df = template_df.merge(agg_df, on="grid_id")
-        agg_df.to_feather(os.path.join(save_path, f"finn_{inventory}_agg.feater"))
+        agg_df = template_df.merge(agg_df, on=["lat", "lon"])
+        agg_df.to_feather(
+            os.path.join(save_path, f"finn_{inventory}_{agg_fun}.feather")
+        )
 
         return agg_df
 
