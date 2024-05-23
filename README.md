@@ -92,13 +92,13 @@ And then running the experiments in `main` with the defined configuration files 
 | Variable       | Source                                                  |   Time    |          Link           |
 | -------------- | ------------------------------------------------------- | :-------: | :---------------------: |
 | Wildfires      | Monitoring Trends in Burn Severity                      | 1987-2022 |        [MTBS][3]        |
-| Fire severity  | ${\Delta}$NBR calculated from Landsat Collection 2[^1]       | 1987-2022 | [Planetary Computer][4] |
+| Fire severity  | $\Delta$NBR calculated from Landsat Collection 2[^1]       | 1987-2022 | [Planetary Computer][4] |
 | Fire Intensity | MODIS Burned Area Products (FIRMS)                      | 2000-2022 |    [MODIS Firms][5]     |
 | Weather        | PRISM fire climatology variables                        | 1985-2022 |       [PRISM][8]        |
 | DEM            | Digital Elevation Model (slope is calculated by us)[^2] |     -     |       [Paper][6]        |
 | Disturbances   | Disturbance Agents in California                        | 1987-2021 |     [Dataverse][7]      |
 | Forest Cover   | NVDI calculation from Landsat Collection 2              | 1987-2022 | [Planetary Computer][4] |
-| Emissions  (1 km$^2$) | Fire Inventory Network from NCAR (FINN)                 | 2012-2022 | [NCAR][11]       |
+| Emissions  (1 $km^2$) | Fire Inventory Network from NCAR (FINN)                 | 2012-2022 | [NCAR][11]       |
 | Emissions  (0.1 deg) | Fire Inventory Network from NCAR (FINN)                 | 2001-2022 | [NCAR][11]       |
 
 [^1]: See our own library [`dnbr_extract`][9] that follows an offset calculation of the NBR index.
