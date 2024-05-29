@@ -8,9 +8,12 @@ library(sf)
 library(pbmcapply)
 library(pbapply)
 library(stringr)
-library(lubridate)
 library(tigris)
+library(lubridate)
 library(arrow)
+library(ggplot2)
+library(estimatr)
+
 
 data_path <- "/mnt/sherlock/oak/smoke_linking_public/data"
 save_path <- "/mnt/sherlock/oak/prescribed_data/processed/smoke_linking"
@@ -18,8 +21,13 @@ save_path <- "/mnt/sherlock/oak/prescribed_data/processed/smoke_linking"
 ##################### CLEANING AND MATCHING GLOBFIRE AND MTBS ##################
 ################################################################################
 
-# helper functions ----
+############################### helper functions ###############################
 `%not_in%` <- purrr::negate(`%in%`)
+
+mode <- function(codes) {
+    which.max(tabulate(codes))
+}
+################################################################################
 
 ## us shape
 conus_bbox <- sf::st_bbox(c(
@@ -154,6 +162,8 @@ data_list <- pbmclapply(fst_files, function(fst_file) {
     by.y = "Id"
     )
 
+data_list[, `:=`(year = lubridate::year(date), month = lubridate::month(date))]
+
 ################################################################################
 ##################### AGGREGATE LINKED SMOKE PM BY EVENT_ID/ID #################
 ################################################################################
@@ -164,7 +174,6 @@ data_agg <- data_list[, .(
     sum_contrib = sum(contrib_smokePM, na.rm = TRUE)
 ), by = "Event_ID"]
 
-
 # Create saving folder if doesn't exist
 if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
@@ -174,3 +183,97 @@ arrow::write_feather(
     data_agg,
     paste0(save_path, "/smoke_pm_fire_event.feather")
 )
+
+################################################################################
+######################### BRING SEVERITY IN AND LAND TYPES #####################
+################################################################################
+
+data_proc <- "/mnt/sherlock/oak/prescribed_data/processed/"
+
+# Load treatments to add to severity
+treatments <- arrow::read_feather(
+    paste0(data_proc, "/treatments_mtbs.feather")
+) %>%
+    filter(Event_ID != "nodata") %>%
+    mutate(Ig_Date = lubridate::date(Ig_Date)) %>%
+    select(c(Event_ID, Ig_Date, Incid_Type, year, lat, lon))
+
+# Load land type data in feather format
+land_type <- arrow::read_feather(
+    paste0(data_proc, "/land_type/land_type.feather")
+)
+
+land_type_event <- land_type %>%
+    inner_join(treatments, by = c("lat", "lon")) %>%
+    select(c(lat, lon, land_type, Event_ID)) %>%
+    group_by(Event_ID) %>%
+    summarize(land_type_mode = mode(land_type)) %>%
+    mutate(land_type_mode = relevel(as.factor(land_type_mode), ref = "1"))
+
+# Read all parquet files and concatenate them
+frp_files <- list.files(
+    paste0(data_proc, "frp/frp_parquet"),
+    pattern = ".parquet",
+    full.names = TRUE
+)
+
+frp <- lapply(frp_files, arrow::read_parquet) %>%
+    bind_rows() %>%
+    select(c(time, frp, grid_id, lat, lon)) %>%
+    mutate(
+        time = lubridate::date(time),
+        month = month(time),
+        year = year(time)
+    ) %>%
+    inner_join(treatments, by = c("year", "lat", "lon")) %>%
+    group_by(Event_ID) %>%
+    summarise(
+        mean_frp = mean(frp, na.rm = TRUE),
+        sum_frp = sum(frp, na.rm = TRUE)
+    ) %>%
+    inner_join(data_agg, by = c("Event_ID")) %>%
+    inner_join(land_type_event, by = "Event_ID")
+
+# Load severity data in feather format
+severity <- arrow::read_feather(
+    paste0(data_proc, "/dnbr_gee_inmediate/dnbr_long.feather")
+) %>%
+    left_join(land_type, by = "grid_id") %>%
+    mutate(dnbr = ifelse(dnbr <= 0, NA, dnbr))
+
+severity_agg <- severity %>%
+    group_by(event_id) %>%
+    summarise(
+        mean_severity = mean(dnbr, na.rm = TRUE),
+        mode_land_type = mode(land_type),
+        share_low_severity = sum((dnbr <= 250) & (dnbr >= 100),
+            na.rm = TRUE
+        ) / n(),
+    ) %>%
+    inner_join(data_agg, by = c("event_id" = "Event_ID"))
+
+# Do a plot that shows the distribution of severity by land type
+severity_agg %>%
+    filter(mode_land_type %in% c(2, 12)) %>%
+    ggplot(aes(
+        y = sum_contrib, x = share_low_severity,
+        color = as.factor(mode_land_type)
+    )) +
+    geom_smooth(method = "lm", se = TRUE) +
+    geom_point(alpha = 0.5) +
+    theme_bw() +
+    scale_y_log10() +
+    labs(
+        y = "Sum emissions",
+        x = "Share of Low Severity Fires"
+    )
+
+lm_robust(sum_contrib ~ sum_frp * land_type_mode,
+    data = frp %>% filter(land_type_mode %in% c(2, 12)),
+) %>%
+    summary()
+
+lm_robust(sum_contrib ~ share_low_severity * mode_land_type,
+    data = severity_agg %>% filter(mode_land_type %in% c(2, 12)),
+) %>%
+    summary()
