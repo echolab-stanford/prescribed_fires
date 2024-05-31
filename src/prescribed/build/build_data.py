@@ -199,16 +199,15 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
                 )
 
                 # Find the DNBR class from the earliest fire per each grid using the
-                # DNBR threshold values:
+                # DNBR threshold values from Key & Benson (2006):
                 conditions = [
-                    (data.dnbr < 0),
-                    (data.dnbr >= 0) & (data.dnbr < 0.01),
-                    (data.dnbr >= 0.01) & (data.dnbr < 0.1),
-                    (data.dnbr >= 0.1) & (data.dnbr < 0.15),
-                    (data.dnbr >= 0.15) & (data.dnbr < 0.3),
-                    data.dnbr >= 0.3,
+                    (data.dnbr < 100),
+                    (data.dnbr >= 100) & (data.dnbr < 270),
+                    (data.dnbr >= 270) & (data.dnbr < 440),
+                    (data.dnbr >= 440) & (data.dnbr < 660),
+                    data.dnbr >= 660,
                 ]
-                choices = [0, 1, 2, 3, 4, 5]
+                choices = [0, 1, 2, 3, 4]
 
                 # Asigning FRP class to each fire
                 data.loc[:, "class_dnbr"] = np.select(
