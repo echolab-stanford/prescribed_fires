@@ -63,7 +63,7 @@ mtbs_df <- read_sf(paste0(data_path, "/mtbs/mtbs_perims_DD.shp")) %>%
 
 # Spatial join by area first filter to relevant years then only keep obs if
 # enough area coverage
-coverage_threshold <- 0.75
+coverage_threshold <- 0.2
 year_list <- c(2006:2020)
 globfire_overlap_df <- pbmclapply(year_list, function(main_year) {
     ## subset data to matching year
@@ -236,7 +236,7 @@ frp <- lapply(frp_files, arrow::read_parquet) %>%
 
 # Load severity data in feather format
 severity <- arrow::read_feather(
-    paste0(data_proc, "/dnbr_gee_inmediate/dnbr_long.feather")
+    paste0(data_proc, "/dnbr_gee/dnbr_long.feather")
 ) %>%
     left_join(land_type, by = "grid_id") %>%
     mutate(dnbr = ifelse(dnbr <= 0, NA, dnbr))
@@ -245,19 +245,31 @@ severity_agg <- severity %>%
     group_by(event_id) %>%
     summarise(
         mean_severity = mean(dnbr, na.rm = TRUE),
-        mode_land_type = mode(land_type),
-        share_low_severity = sum((dnbr <= 250) & (dnbr >= 100),
-            na.rm = TRUE
-        ) / n(),
+        land_type_mode = mode(land_type),
+        pixels_low_severity = sum((dnbr <= 250) & (dnbr >= 100), na.rm = TRUE),
+        share_low_severity = pixels_low_severity / n()
+    ) %>%
+    inner_join(
+        mtbs_ca %>%
+            select(Event_ID, mtbs_burn_area) %>%
+            st_drop_geometry(),
+        by = c("event_id" = "Event_ID")
+    ) %>%
+    mutate(
+        mtbs_burn_area = as.numeric(mtbs_burn_area) * 1e-6,
+        share_low_severity_mtbs = pixels_low_severity / mtbs_burn_area,
+        share_low_severity_mtbs = ifelse(
+            share_low_severity >= 1, NA, share_low_severity
+        )
     ) %>%
     inner_join(data_agg, by = c("event_id" = "Event_ID"))
 
 # Do a plot that shows the distribution of severity by land type
 severity_agg %>%
-    filter(mode_land_type %in% c(2, 12)) %>%
+    filter(land_type_mode %in% c(2, 12)) %>%
     ggplot(aes(
-        y = sum_contrib, x = share_low_severity,
-        color = as.factor(mode_land_type)
+        y = sum_contrib, x = share_low_severity_mtbs,
+        color = as.factor(land_type_mode)
     )) +
     geom_smooth(method = "lm", se = TRUE) +
     geom_point(alpha = 0.5) +
@@ -267,13 +279,18 @@ severity_agg %>%
         y = "Sum emissions",
         x = "Share of Low Severity Fires"
     )
+ggplot2::ggsave(
+    paste0(save_path, "fire_severity_land_type.png"),
+    width = 6,
+    height = 6
+)
 
-lm_robust(sum_contrib ~ sum_frp * land_type_mode,
+lm_robust(sum_contrib ~ sum_frp * as.factor(land_type_mode),
     data = frp %>% filter(land_type_mode %in% c(2, 12)),
 ) %>%
     summary()
 
-lm_robust(sum_contrib ~ share_low_severity * mode_land_type,
-    data = severity_agg %>% filter(mode_land_type %in% c(2, 12)),
+lm_robust(sum_contrib ~ share_low_severity * as.factor(land_type_mode),
+    data = severity_agg %>% filter(land_type_mode %in% c(2, 12)),
 ) %>%
     summary()
