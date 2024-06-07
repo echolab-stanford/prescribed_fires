@@ -291,55 +291,88 @@ def plot_outcomes(
     colorbar=False,
     ax=None,
     label=None,
+    pooled=False,
 ):
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 4))
 
-    df_conifer[(df_conifer.lag >= 0) & (df_conifer.focal_year <= 2020)].plot.scatter(
-        x="lag",
-        y=var_interest,
-        c="focal_year",
-        cmap=cmap_conifer,
-        ax=ax,
-        alpha=0.5,
-        colorbar=False,
-    )
+    if pooled:
+        # Sort dfs to make sure plots are nice
+        df_conifer = df_conifer.sort_values("year")
+        df_shrub = df_shrub.sort_values("year")
 
-    df_shrub[(df_shrub.lag >= 0) & (df_shrub.focal_year <= 2020)].plot.scatter(
-        x="lag",
-        y=var_interest,
-        c="focal_year",
-        cmap=cmap_shrub,
-        ax=ax,
-        alpha=0.5,
-        colorbar=colorbar,
-    )
+        df_conifer.set_index("year")["coef"].plot(
+            color="#a6cee3", legend=False, label="", ax=ax
+        )
+        df_shrub.set_index("year")["coef"].plot(
+            color="#fdc086", legend=False, label="", ax=ax
+        )
 
-    sns.regplot(
-        x="lag",
-        y=var_interest,
-        data=df_conifer[(df_conifer.focal_year <= 2020)],
-        scatter=False,
-        ax=ax,
-        color="#fdc086",
-        label="Conifers",
-        order=order,
-        lowess=lowess,
-        robust=robust,
-    )
+        ax.fill_between(
+            df_conifer["year"],
+            df_conifer["low_ci"],
+            df_conifer["high_ci"],
+            cmap=cmap_conifer,
+            alpha=0.3,
+            label="Conifers",
+        )
+        ax.fill_between(
+            df_shrub["year"],
+            df_shrub["low_ci"],
+            df_shrub["high_ci"],
+            cmap=cmap_shrub,
+            alpha=0.3,
+            label="Shrublands",
+        )
 
-    sns.regplot(
-        x="lag",
-        y=var_interest,
-        data=df_shrub[(df_shrub.focal_year <= 2020)],
-        scatter=False,
-        ax=ax,
-        color="#a6cee3",
-        label="Shrublands",
-        order=order,
-        lowess=lowess,
-        robust=robust,
-    )
+    else:
+        df_conifer[
+            (df_conifer.lag >= 0) & (df_conifer.focal_year <= 2021)
+        ].plot.scatter(
+            x="lag",
+            y=var_interest,
+            c="focal_year",
+            cmap=cmap_conifer,
+            ax=ax,
+            alpha=0.5,
+            colorbar=False,
+        )
+
+        df_shrub[(df_shrub.lag >= 0) & (df_shrub.focal_year <= 2021)].plot.scatter(
+            x="lag",
+            y=var_interest,
+            c="focal_year",
+            cmap=cmap_shrub,
+            ax=ax,
+            alpha=0.5,
+            colorbar=colorbar,
+        )
+
+        sns.regplot(
+            x="lag",
+            y=var_interest,
+            data=df_conifer[(df_conifer.focal_year <= 2021)],
+            scatter=False,
+            ax=ax,
+            color="#fdc086",
+            label="Conifers",
+            order=order,
+            lowess=lowess,
+            robust=robust,
+        )
+
+        sns.regplot(
+            x="lag",
+            y=var_interest,
+            data=df_shrub[(df_shrub.focal_year <= 2021)],
+            scatter=False,
+            ax=ax,
+            color="#a6cee3",
+            label="Shrublands",
+            order=order,
+            lowess=lowess,
+            robust=robust,
+        )
 
     if legend:
         ax.legend(loc="upper right")
@@ -626,6 +659,7 @@ def template_plots(
     axis_text=10,
     label_axis=12,
     vert=None,
+    title=None,
     label_vert=None,
 ):
     """Axis template for matplotlib plots.
@@ -650,6 +684,8 @@ def template_plots(
         Add label to plot (left-top corner), by default None. If passed, you should pass a letter only.
     axis_text : int, optional
         Size of the text in the axis, by default 10
+    title : str, optional
+        Title of the plot, by default None. Added to the top of the axis.
 
     Returns
     -------
@@ -703,6 +739,9 @@ def template_plots(
 
     # Change text in ticks
     ax.tick_params(labelsize=axis_text)
+
+    if title is not None:
+        ax.set_title(title, fontsize=axis_text)
 
     # Add vertical line
     if vert:

@@ -1,8 +1,10 @@
 import logging
+from typing import Optional
+
 import numpy as np
 import pandas as pd
+import statsmodels.formula.api as smf
 from tqdm import tqdm
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -16,10 +18,14 @@ def calculate_estimator(
     low_treatment_class: list = [2, 1],
     lag_up_to: int = 2021,
     scale: Optional[float] = False,
+    pooling: Optional[bool] = False,
+    **kwargs,
 ) -> pd.DataFrame:
     """Calculate lagged effects for a a given focal year
 
-    This function calculates the estimator for each of the lagged years in our data using a weighted average.
+    This function calculates the estimator for each of the lagged years in our data using a weighted average. If the `pooling` option is passed, then we pool the estimates across the lags using a OLS model with Jackknife errors (for more details see `pooling_estimates` function).
+
+    See parameters to understand the rest of the options.
 
     Parameters
     ----------
@@ -37,6 +43,12 @@ def calculate_estimator(
         The class of the low treatment for [dnbr, frp]. Default is [2, 1]
     lag_up_to : int
         The maximum lag that we want to calculate the estimator
+    scale : Optional[float]
+        A scaling factor for the estimator. Default is False
+    pooling : Optional[bool]
+        If we want to pool the estimators across lags. Default is False
+    **kwargs
+        Additional arguments to pass to the `pooling_estimates` function
 
     Returns
     -------
@@ -120,4 +132,82 @@ def calculate_estimator(
 
     df = pd.concat(results)
 
+    # Pool the estimates if passes
+    if pooling:
+        df = pooling_estimates(df, **kwargs)
+
     return df
+
+
+def pooling_estimates(df: pd.DataFrame, cluster_var: str, formula: str) -> pd.DataFrame:
+    """Calculate variance/ses for pooled estimators
+
+    This function pools the estimates to calculate the variance of the relationship between the ATTs and the lags. To do this we will use a simple OLS fit and to estimate the variance just use a LOO (leave-one-out) approach as a response of the SC design (i.e. control and treatment groups can have overlaps over time in consecutive years). This function will take results from the `calculate_estimator` (and actually be inside this function if the user want SEs), thus the input should be the output of the `calculate_estimator` function.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A dataframe with the estimator for each of the lagged years
+    cluster_var : str
+        The name of the cluster variable for the Jackkife estimation
+    fomula : str
+        The formula to use in the OLS estimation. This is any valid formula for `patsy` (thus anything you can pass to statsmodels.smf.api)
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe with the variance for each of the lagged years
+    """
+
+    # Build year samples for cluster-year Jackknife
+    cluster = df[cluster_var].unique()
+    lags = df["lag"].unique()
+
+    # Create jk samples: loo for year year
+    lists = [
+        [elem for j, elem in enumerate(cluster) if j != i] for i in range(len(cluster))
+    ]
+
+    # Mean model with all the sample
+    model_all_years = smf.ols(formula=formula, data=df)
+    result_all_years = model_all_years.fit()
+    coefs_all_years = result_all_years.predict(pd.DataFrame({"lag": lags}))
+
+    # Model using OLS for each Jackknife sample and store in nd-array (samples, lags)
+    arr = np.zeros((len(lists), lags.size))  # Fill array of sample / lags
+    for jk_sample in lists:
+        model = smf.ols(
+            formula=formula,
+            data=df[df[cluster_var].isin(jk_sample)],
+        )
+        result = model.fit()
+
+        # Calculate predictions for each lag
+        lag_df = pd.DataFrame({"lag": lags})
+        coefs = result.predict(lag_df)
+
+        arr[lists.index(jk_sample), :] = coefs.values
+
+    # Calculate the standard errors for each jk sample
+    ses = np.apply_along_axis(
+        lambda x: np.sqrt(np.var(x) * (x.size - 1) ** 2 / x.size), 0, arr
+    )
+
+    # Calculate the CIs
+    low_ci, high_ci = (
+        coefs_all_years.values - 1.96 * ses,
+        coefs_all_years.values + 1.96 * ses,
+    )
+
+    # Store the results
+    results = pd.DataFrame(
+        {
+            "year": lags,
+            "coef": coefs_all_years,
+            "low_ci": low_ci,
+            "high_ci": high_ci,
+            "se": ses,
+        }
+    )
+
+    return results
