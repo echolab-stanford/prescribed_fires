@@ -1,4 +1,4 @@
-""" Create template grid for aligned data extraction
+"""Create template grid for aligned data extraction
 
 This script creates a template grid for aligned data extraction. The grid is
 defined using the Natural Earth provinces shapefile using user-defined resolution

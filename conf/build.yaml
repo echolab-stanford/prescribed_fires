@@ -10,11 +10,11 @@ build:
   staggered: true
   min_count_treatments: 2
   verbose: false
-  save_path: "${save_path}/wide_treatments"
+  save_path: "${save_path}/wide_treatments_gee_inmediate"
   lhs:
     frp: 
       path: ${save_path}/frp/frp_concat.feather
       classify: true
     dnbr: 
-      path: ${save_path}/dnbr_emissions/dnbr_long.feather
-      classify: false
+      path: ${save_path}/dnbr_gee_inmediate/dnbr_long.feather
+      classify: true

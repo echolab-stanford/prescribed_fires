@@ -24,13 +24,11 @@ extract:
     feather: true
     wide: true
   dnbr:
-    path: "${data_path}/emissions/burn_severity_CA/clean_files"
-    save_path: "${save_path}/dnbr_emissions/"
-    #path: "${data_path}/dnbr_landsat_c2_l2_buf"
-    #save_path: "${save_path}/dnbr"
+    path: "${data_path}/dnbr/dnbr_gee_inmediate/"
+    save_path: "${save_path}/dnbr_gee_inmediate/"
     feather: true
     overwrite: false
-    classes: true
+    classes: false
   emissions:
     path: "${data_path}/emissions/emission_CA"
     save_path: "${save_path}/emissions_pm25"
