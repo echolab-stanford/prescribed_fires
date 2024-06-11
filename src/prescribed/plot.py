@@ -301,28 +301,26 @@ def plot_outcomes(
         df_conifer = df_conifer.sort_values("year")
         df_shrub = df_shrub.sort_values("year")
 
-        df_conifer.set_index("year")["coef"].plot(
-            color="#a6cee3", legend=False, label="", ax=ax
-        )
-        df_shrub.set_index("year")["coef"].plot(
-            color="#fdc086", legend=False, label="", ax=ax
-        )
-
-        ax.fill_between(
-            df_conifer["year"],
-            df_conifer["low_ci"],
-            df_conifer["high_ci"],
-            cmap=cmap_conifer,
-            alpha=0.3,
-            label="Conifers",
+        df_conifer.plot(
+            x="year", y="coef", color="#fdc086", legend=False, label="Conifers", ax=ax
         )
         ax.fill_between(
             df_shrub["year"],
             df_shrub["low_ci"],
             df_shrub["high_ci"],
             cmap=cmap_shrub,
-            alpha=0.3,
-            label="Shrublands",
+            alpha=0.2,
+        )
+
+        df_shrub.plot(
+            x="year", y="coef", color="#a6cee3", legend=False, label="Shurblands", ax=ax
+        )
+        ax.fill_between(
+            df_conifer["year"],
+            df_conifer["low_ci"],
+            df_conifer["high_ci"],
+            cmap=cmap_conifer,
+            alpha=0.2,
         )
 
     else:

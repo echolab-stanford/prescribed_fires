@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from .report import report_treatments
-from sklearn.preprocessing import MinMaxScaler
 
 from ..utils import prepare_template
 
@@ -9,10 +8,10 @@ from ..utils import prepare_template
 def fill_treatment_template(
     template_path: str,
     treatments_path: str,
-    query: str,
-    staggered: bool = True,
+    staggered: bool = False,
     verbose: bool = False,
     min_count_treatments: int = 2,
+    query: str = None,
     **kwargs,
 ) -> pd.DataFrame:
     """Aux function to merge template with MTBS-like treatment data in feather format
@@ -193,11 +192,6 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
             data = data[~data.grid_id.isna()]
 
             if covariates_dict[key]["classify"]:
-                # Scale dnbr to -1 and 1
-                data["dnbr"] = MinMaxScaler(feature_range=(-1, 1)).fit_transform(
-                    data["dnbr"]["path"].values.reshape(-1, 1)
-                )
-
                 # Find the DNBR class from the earliest fire per each grid using the
                 # DNBR threshold values from Key & Benson (2006):
                 conditions = [
