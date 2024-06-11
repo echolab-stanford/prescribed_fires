@@ -1,10 +1,14 @@
 import hashlib
+from pathlib import Path
+from typing import Optional, Union
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
 import rioxarray
 import xarray as xr
+from tqdm import tqdm
 
 
 def expand_grid(dict_vars):
@@ -137,3 +141,138 @@ def generate_run_id(parameters):
     params_string = str(parameters)
 
     return hashlib.md5(params_string.encode()).hexdigest()
+
+
+def calculate_fire_pop_dens(
+    geoms: gpd.GeoDataFrame,
+    pop_raster_path: Union[dict, str],
+    buffer: int = 10000,
+    date_col: str = "Ig_Date",
+    mask: Optional[Union[gpd.GeoDataFrame, str]] = None,
+    template: Optional[xr.core.dataarray.DataArray] = None,
+):
+    """Calculate population density within a buffer of each geometry
+
+    This function will calculate the population density column for a particular
+    dataframe of geometries. It will use population rasters (such as CIESIN) to
+    calculate the population density within a user-defined buffer for each
+    geometry. As some population products change each 5-10 years, this function
+    will use a raster that is closest to the year of the geometry using a year
+    column and a dictionary of raster paths. If the dictionary is not passed, it
+    will be built using CIESIN population rasters naming defaults.
+
+    The function will return a data frame with the population density for each
+    buffer:
+     - Event_ID: The ID of the geometry
+     - Ig_Date: The date of the geometry
+     - Incid_Name: The name of the geometry
+     - Incid_Type: The type of the geometry
+     - buffer: The buffer distance in meters
+     - total_pop: The total population within the buffer
+     - mean_pop: The mean population density within the buffer
+     - donut: The geometry of the buffer without the geometry
+
+    Parameters
+    ----------
+    geoms : gpd.GeoDataFrame
+        A GeoDataFrame with geometries to calculate population density
+    pop_raster_path : Union[dict, str]
+        A dictionary of raster paths for population data or a single path
+    buffer : int, optional
+        The buffer distance in meters, by default 10000 (10 km)
+    date_col : str, optional
+        The column in the GeoDataFrame with the year of the geometry, by default "Ig_Date"
+    mask : Optional[rioxarray.raster_array.RasterArray], optional
+        A raster to mask the population raster, by default None
+    """
+
+    # If a dictionary is not passed, build it from CIESIN population rasters
+    if isinstance(pop_raster_path, str):
+        pop_raster_path = {
+            int(p.stem.split("_")[-3]): rioxarray.open_rasterio(p)
+            for p in Path(pop_raster_path).glob("*.tif")
+        }
+
+    if mask is not None:
+        if isinstance(mask, str):
+            mask = gpd.read_file(mask).to_crs(4326)
+        else:
+            # Reproject mask to the population raster
+            mask = mask.to_crs(4326)
+
+        for key, val in pop_raster_path.items():
+            ds_attrs = val.attrs
+
+            ds_mask = val.rio.clip(mask.geometry.values, drop=True, invert=False)
+
+            if template is not None:
+                # Reproject the mask to the template
+                ds_mask = ds_mask.rio.reproject_match(template)
+            else:
+                ds_mask = ds_mask.rio.reproject(3310)
+
+            # Mask the population raster with np.nan for population outside the mask
+            ds_mask = xr.where(ds_mask == ds_attrs["_FillValue"], np.nan, ds_mask)
+            ds_mask = ds_mask.rio.write_crs(3310)
+
+            pop_raster_path[key] = ds_mask
+    else:
+        print("Without a mask the process can take longer than expected")
+
+    # Get the year of the geometry
+    geoms[date_col] = pd.to_datetime(geoms[date_col])
+    geoms["year"] = geoms[date_col].dt.year
+
+    # Project to meters in the CA projection Albers
+    geoms = geoms.to_crs("EPSG:3310")
+    geoms["buffer"] = geoms.buffer(buffer)
+
+    # Get the population raster closest to the year of the geometry
+    arr_years = np.apply_along_axis(
+        lambda x: min(pop_raster_path.keys(), key=lambda y: np.abs(y - x)),
+        1,
+        geoms["year"].values.reshape(-1, 1),
+    )
+    geoms["pop_raster_year"] = arr_years
+
+    pop_dens_geom = []
+    for _, row in tqdm(
+        geoms.iterrows(), total=geoms.shape[0], desc="Calculating population density..."
+    ):
+        # Open the raster and crop to the geometry
+        ds = pop_raster_path[row["pop_raster_year"]].squeeze()
+
+        # Clip the raster to the geometry and build a donut
+        clip_geom = ds.rio.clip([row["buffer"]], drop=True, invert=False)
+        donut = clip_geom.rio.clip([row["geometry"]], drop=True, invert=True)
+
+        # Do the same with geometry
+        donut_geom = row["buffer"].difference(row["geometry"])
+
+        # Calculate the pop of the geometry
+        total_pop = donut.sum().values
+        mean_pop = donut.mean().values
+
+        # Transform to df
+        pop_dens_geom.append(
+            gpd.GeoDataFrame(
+                {
+                    "Event_ID": row["Event_ID"],
+                    "Ig_Date": row["Ig_Date"],
+                    "Incid_Name": row["Incid_Name"],
+                    "Incid_Type": row["Incid_Type"],
+                    "buffer": buffer,
+                    "total_pop": total_pop,
+                    "mean_pop": mean_pop,
+                    "donut": donut_geom,
+                    "geometry": row["geometry"],
+                },
+                index=[0],
+            )
+        )
+
+    # Return a DataFrame with the population density
+    df = pd.concat(pop_dens_geom)
+    df.crs = "EPSG:3310"
+
+    return df

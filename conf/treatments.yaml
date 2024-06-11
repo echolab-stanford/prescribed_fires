@@ -1,0 +1,15 @@
+root_path: "/mnt/sherlock/oak/prescribed_data"
+save_path: "${root_path}/processed"
+data_path: "${root_path}/raw"
+template: "${root_path}/geoms/templates/template.tif"
+
+treatments:
+  mtbs_shapefile: "${root_path}/geoms/mtbs_perims_DD_updated/mtbs_perims_DD.shp"
+  template: "${template}"
+  save_path: "${save_path}/treatments_mtbs_spillovers_1000.feather"
+  spillovers: true
+  threshold: 0.75
+  buffer_treatment: 1000
+  buffer: 10000
+  pop_raster_path: "${data_path}/population"
+  mask: "${root_path}/geoms/california_geom/datacalifornia_geom.shp"
