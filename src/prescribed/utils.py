@@ -10,6 +10,9 @@ import rioxarray
 import xarray as xr
 from tqdm import tqdm
 
+import joblib
+import contextlib
+
 
 def expand_grid(dict_vars):
     """Create cartesian product of a set of vectors and return a datafarme
@@ -108,7 +111,10 @@ def prepare_template(template_path, years=[2000, 2023]):
     """
 
     # Load template to start merging
-    template = rioxarray.open_rasterio(template_path)
+    if isinstance(template_path, str):
+        template = rioxarray.open_rasterio(template_path)
+    else:
+        template = template_path
 
     # Notice template is 1 for land and 0 for water
     template_df = (
@@ -197,7 +203,8 @@ def calculate_fire_pop_dens(
         if isinstance(mask, str):
             mask = gpd.read_file(mask).to_crs(4326)
         else:
-            # Reproject mask to the population raster
+            # Reproject mask to the population raster CRS (by default is 4326)
+            # maybe adding a pop_raster_crs parameter in the future.
             mask = mask.to_crs(4326)
 
         for key, val in pop_raster_path.items():
@@ -276,3 +283,24 @@ def calculate_fire_pop_dens(
     df.crs = "EPSG:3310"
 
     return df
+
+
+@contextlib.contextmanager
+def tqdm_joblib(tqdm_object):
+    """Context manager to patch joblib to report into tqdm progress bar given as argument
+
+    Taken from: https://stackoverflow.com/questions/24983493/tracking-progress-of-joblib-parallel-execution
+    """
+
+    class TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
+        def __call__(self, *args, **kwargs):
+            tqdm_object.update(n=self.batch_size)
+            return super().__call__(*args, **kwargs)
+
+    old_batch_callback = joblib.parallel.BatchCompletionCallBack
+    joblib.parallel.BatchCompletionCallBack = TqdmBatchCompletionCallback
+    try:
+        yield tqdm_object
+    finally:
+        joblib.parallel.BatchCompletionCallBack = old_batch_callback
+        tqdm_object.close()
