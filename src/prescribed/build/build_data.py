@@ -219,7 +219,7 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
 
 
 def treatment_schedule(
-    treatment_template: pd.DataFrame, treatment_fire: dict
+    treatment_template: pd.DataFrame, treatment_fire: dict, no_class: bool = False
 ) -> pd.DataFrame:
     """Create treatment dataframe organized by year and grid_id
 
@@ -274,6 +274,13 @@ def treatment_schedule(
     # class_frp and class_dnbr
     treatment_template["class_frp"] = treatment_template["class_frp"].fillna(0)
     treatment_template["class_dnbr"] = treatment_template["class_dnbr"].fillna(0)
+
+    # If the treatment definition is not given by classes, we can just shut these
+    # and leave them as 1, such as when multiplied by the treatment they're always
+    # 1.
+    if no_class:
+        treatment_template["class_frp"] = 1
+        treatment_template["class_dnbr"] = 1
 
     # Drop coordinate columns
     treatment_template.drop(

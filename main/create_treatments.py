@@ -112,7 +112,7 @@ def create_treatments(
 
         # Calculate threshold and subset geometry
         tresh = pop_dens.total_pop.quantile([threshold]).values[0]
-        wildfires_meters = pop_dens[pop_dens["total_pop"] > tresh]
+        wildfires_meters = pop_dens[pop_dens["total_pop"] <= tresh]
 
         # Create buffer and new treatment donut
         wildfires_meters["geometry"] = wildfires_meters.buffer(
