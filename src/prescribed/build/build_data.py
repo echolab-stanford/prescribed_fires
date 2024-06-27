@@ -201,7 +201,7 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
                     (data.dnbr >= 440) & (data.dnbr < 660),
                     data.dnbr >= 660,
                 ]
-                choices = [0, 1, 2, 3, 4]
+                choices = [0, 1, 2, 3, 4]  # This is a mistake! this should start in 1!
 
                 # Asigning FRP class to each fire
                 data.loc[:, "class_dnbr"] = np.select(

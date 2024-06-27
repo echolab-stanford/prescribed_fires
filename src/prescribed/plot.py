@@ -285,6 +285,7 @@ def plot_outcomes(
     cmap_conifer="Oranges",
     cmap_shrub="Blues",
     order=1,
+    dotted=0,
     robust=False,
     lowess=False,
     legend=False,
@@ -380,7 +381,7 @@ def plot_outcomes(
     ax.spines["left"].set_position(("outward", 10))
     ax.spines["bottom"].set_position(("outward", 10))
 
-    ax.axhline(0, color="black", linestyle="--", c="gray")
+    ax.axhline(dotted, color="black", linestyle="--", c="gray")
 
     x_lab, y_lab = axes_names
     ax.set_ylabel(x_lab)
