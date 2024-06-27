@@ -1,11 +1,14 @@
+import os
 from itertools import product
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 from joblib import Parallel, delayed
 from prescribed.utils import tqdm_joblib
 from tqdm import tqdm
+
 from .create_distances import create_distances
-from .rdrobust import rdrobust, rdplot
+from .rdrobust import rdplot, rdrobust
 
 
 def estimation_rdd(
@@ -159,10 +162,16 @@ def rdds_along_distances(
     distances: list,
     rdd_kws: dict,
     dict_dist_kws: dict,
-    save_path: str = None,
+    save_dir: str = None,
+    file_name: str = None,
 ) -> pd.DataFrame:
     """Run multiple RDD estimations for different lags, years, and distances"""
 
+    # Check buffers in case they're not lists, we don't want the loop to fail
+    if not isinstance(distances, list):
+        distances = [distances]
+
+    # Loop and store!
     list_dfs = []
     for buf in distances:
         distance_df = create_distances(
@@ -192,15 +201,19 @@ def rdds_along_distances(
             plot_rdd=False,
         )
 
-        print(est_res.shape)
-
         # Create a dummy var if Coeff is significant using the CIs
         est_res["insignificant"] = (est_res["ci_low"] <= 0) & (est_res["ci_high"] > 0)
 
         est_res["treat_buffer"] = buf
         list_dfs.append(est_res)
 
-    if save_path:
-        pd.concat(list_dfs).to_csv(save_path, index=True)
+    if save_dir & file_name:
+        if not os.path.exists(os.path.dirname(save_dir)):
+            os.makedirs(os.path.dirname(save_dir), exist_ok=True)
+
+        save_path = os.path.join(save_dir, file_name)
+        df = pd.concat(list_dfs).reset_index()
+        df = df.rename(columns={"index": "est_type"})
+        df.to_csv(save_path, index=False)
 
     return pd.concat(list_dfs)
