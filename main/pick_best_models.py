@@ -72,7 +72,7 @@ def tyra(path_to_db, save_path):
         f"""
     SELECT *
     FROM '{path_to_db}/std_diffs/*.parquet'
-    WHERE model_run_id IN {repr(tuple(map(str, best_model_loss.model_run_id.tolist())))}
+    WHERE model_run_id IN {repr(tuple(map(str, best_model_asmd.model_run_id.tolist())))}
     """
     ).to_df()
 
@@ -86,7 +86,7 @@ def tyra(path_to_db, save_path):
         f"""
     SELECT weights, focal_year, row_id as grid_id
     FROM '{path_to_db}/results/*.parquet'
-    WHERE model_run_id IN  {repr(tuple(map(str, best_model_asmd.model_run_id.tolist())))}
+    WHERE model_run_id IN  {repr(tuple(map(str, best_model_loss.model_run_id.tolist())))}
     """
     ).to_df()
 

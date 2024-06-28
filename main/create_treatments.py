@@ -92,7 +92,9 @@ def create_treatments(
     # Open template as xarray
     template = rioxarray.open_rasterio(template)
 
-    # Filter for wildfires and prescribed fires in California
+    # Filter for wildfires and prescribed fires in California only. This is a bit
+    # of a hardcoding, but can be change to a query too. Also, we only care about
+    # these two.
     wildfires = mtbs[
         (mtbs.Event_ID.str.contains("CA"))
         & (mtbs.Incid_Type.isin(["Wildfire", "Prescribed Fire"]))
