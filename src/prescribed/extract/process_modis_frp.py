@@ -1,4 +1,5 @@
 import os
+import pdb
 import logging
 import pandas as pd
 import geopandas as gpd
@@ -14,7 +15,12 @@ log = logging.getLogger(__name__)
 
 
 def process_modis_file(
-    file_path, save_path, aoi, template_path, feather=False, wide=False
+    file_path,
+    save_path,
+    aoi,
+    template_path,
+    wide=False,
+    confidence: float = 50.0,
 ):
     """Process MODIS file from FIRMS and transform into array format
 
@@ -34,10 +40,11 @@ def process_modis_file(
         Path to the crosswalk file (shapefile)
     template_path : str
         Path to the template file to reproject to
-    feather : bool
-        If True, save all data as a single feather file in long format, unless wide is True. In that case it will save both file in feather format.
     wide : bool
         If True, save the data in wide format with a cumulative sum and count for count the cumulative fire behavior. It will save both wide and long files in feather format.
+    confidence : float
+        Confidence threshold to filter the data. Default is 50. The MODIS data comes with  confidence values from 0 to 100 to describe the level of certainty of the fire detection.
+        See more here: https://modis-fire.umd.edu/files/MODIS_C61_BA_User_Guide_1.1.pdf
 
     Returns
     -------
@@ -45,12 +52,22 @@ def process_modis_file(
         Saves yearly NetCDF files with the processed data or a single feather file in either long or wide format.
     """
 
-    # Read the CSV file
+    # Create save dir if it does not exist
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    # Read the CSV file to start processing
     df = pd.read_csv(file_path)
     aoi = gpd.read_file(aoi)
 
-    # Create date column
-    df["acq_date"] = pd.to_datetime(df.acq_date)
+    # Create date column using the date and time
+    df["timestamp"] = (
+        df["acq_date"] + " " + df["acq_time"].astype(str).str.zfill(4)
+    )  # This is a small trick to make it HH:MM
+    df["timestamp"] = pd.to_datetime(df.timestamp)
+
+    # Subset to keep the good pixels with confidence
+    df = df[df["confidence"] >= confidence]
 
     # Transform CSV to geopandas dataframe
     df_points = gpd.GeoDataFrame(
@@ -66,83 +83,73 @@ def process_modis_file(
     df_points_proj = df_points.to_crs(aoi.crs.to_epsg())
 
     # Spatial join to filter all points out of the aoi
-    df_points = sjoin(df_points_proj, aoi, how="inner")
+    df_points_proj = sjoin(df_points_proj, aoi, how="inner")
 
-    # Group per each year and create yearly arrays
-    groupped_date = df_points_proj.groupby(df_points_proj["acq_date"].dt.year)
+    year_files = []
+    for year in tqdm(
+        df_points_proj.timestamp.dt.year.unique(), desc="Array-ing the data"
+    ):
+        # Check if file exists, otherwise skip and load from storage
+        file_stem = f"frp_modis_firms_{int(year)}"
+        path_to_save = os.path.join(save_path, f"{file_stem}.nc4")
 
-    feather_files = []
-    for year, group in tqdm(groupped_date, desc="Array-ing the data"):
-        arrays_date = []
-        for name, group_day in group.groupby(["acq_date"]):
-            geo_grid = make_geocube(
-                vector_data=group_day,
+        if not os.path.exists(path_to_save):
+            year_df = df_points_proj[df_points_proj.timestamp.dt.year == year]
+            # Take the max value of the FRP for each pixel-year
+            year_df = year_df.groupby(
+                ["latitude", "longitude", "geometry"], as_index=False
+            ).frp.max()
+
+            frp_year = make_geocube(
+                vector_data=year_df,
                 measurements=["frp"],
                 like=template,
             )
-            geo_grid = geo_grid.expand_dims({"time": name})
-            arrays_date.append(geo_grid)
 
-        # Concat daily arrays
-        frp_year = xr.concat(arrays_date, dim="time")
-        frp_year = frp_year.sortby("time").rename({"x": "lon", "y": "lat"})
+            # Save file to avoid re-processing when building other stuff.
+            frp_year.attrs["confidence"] = confidence
+            frp_year = frp_year.rename({"x": "lon", "y": "lat"})
+            frp_year.to_netcdf(path_to_save)
+        else:
+            frp_year = xr.open_dataset(path_to_save)
 
-        # Create save path if it does not exist
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        df = frp_year.drop_vars(["spatial_ref"]).to_dataframe().reset_index().dropna()
+        df["year"] = year
+        year_files.append(df)
 
-        file_stem = f"frp_modis_firms_{int(year)}"
-        path_to_save = os.path.join(save_path, f"{file_stem}.nc4")
-        frp_year.to_netcdf(path_to_save)
-
-        if feather:
-            df = (
-                frp_year.drop_vars(["spatial_ref"])
-                .to_dataframe()
-                .reset_index()
-                .dropna()
-            )
-            df["year"] = df["time"].dt.year
-            feather_files.append(df)
-
-    # Save feather files if needed
     # Open template file
     template_expanded = prepare_template(template_path)
 
-    if feather:
-        concat_data = pd.concat(feather_files)
-        concat_data = concat_data.merge(template_expanded, on=["lat", "lon", "year"])
+    # Concatenate all the data and merge with the template
+    concat_data = pd.concat(year_files)
+    concat_data = concat_data.merge(template_expanded, on=["lat", "lon", "year"])
 
-        concat_data = concat_data.groupby(["grid_id", "year"], as_index=False).frp.max()
+    # Drop lat and lon columns temporarily to avoid double columns
+    concat_data = concat_data.drop(columns=["lat", "lon"])
 
-        # Add count of fires per year in a cummulative way
-        concat_data["fire"] = 1
-        concat_data["count_fires"] = concat_data.groupby(["grid_id"]).fire.cumsum()
-        concat_data = concat_data.merge(
-            template_expanded, on=["grid_id", "year"], how="right"
+    # Add count of fires per year in a cummulative way
+    concat_data["fire"] = 1
+    concat_data["count_fires"] = concat_data.groupby(["grid_id"]).fire.cumsum()
+    concat_data = concat_data.merge(
+        template_expanded, on=["grid_id", "year"], how="right"
+    )
+
+    # Forward fill all NAs after merge and fill the rest with 0
+    concat_data.update(concat_data.groupby(["grid_id"]).ffill().fillna(0))
+
+    if wide:
+        # Pivot the table to wide format and save to feather
+        wide_frp = pd.pivot(
+            concat_data,
+            index="grid_id",
+            columns="year",
+            values=["count_fires"],
         )
+        wide_frp.columns = [f"{col}_{idx}" for col, idx in wide_frp.columns]
+        wide_frp = wide_frp.reset_index()
 
-        # Add fire aggregations and cumsum to get the cumulative frp for all the time
-        concat_data["cum_frp"] = concat_data.groupby(
-            ["grid_id"], as_index=False
-        ).frp.cummax()
-
-        # Forward fill all NAs after merge and fill the rest with 0
-        concat_data.update(concat_data.groupby(["grid_id"]).ffill().fillna(0))
-
-        if wide:
-            # Pivot the table to wide format and save to feather
-            wide_frp = pd.pivot(
-                concat_data,
-                index="grid_id",
-                columns="year",
-                values=["cum_frp", "count_fires"],
-            )
-            wide_frp.columns = [f"{col}_{idx}" for col, idx in wide_frp.columns]
-            wide_frp = wide_frp.reset_index()
-
-            log.info("Saving PRISM in wide format")
-            wide_frp.to_feather(os.path.join(save_path, "frp_wide.feather"))
+        log.info("Saving PRISM in wide format")
+        wide_frp.to_feather(os.path.join(save_path, "frp_wide.feather"))
 
     # Save to feather
     log.info("Saving PRISM in long format")
