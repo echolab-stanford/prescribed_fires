@@ -8,7 +8,7 @@ extract:
   frp:
     path: "${data_path}/modis/fire_archive_M-C61_403638.csv"
     save_path: "${save_path}/frp"
-    feather: true
+    confidence: 30
     wide: true
   prism:
     variables: 
@@ -38,7 +38,6 @@ extract:
   disturbances:
     path: "${data_path}/disturbances"
     save_path: "${save_path}/disturbances"
-    feather: true
     wide: true
   dem:
    path: "${data_path}/dem/elevation_1KMmn_GMTEDmn.tif"

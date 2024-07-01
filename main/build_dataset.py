@@ -3,7 +3,8 @@ import logging
 import hydra
 from omegaconf import DictConfig
 from prescribed.build.build_data import (
-    fill_treatment_template,
+    fill_treatment_template_mtbs,
+    fill_treatment_template_frp,
     build_lhs,
     treatment_schedule,
 )
@@ -13,15 +14,25 @@ log = logging.getLogger(__name__)
 
 @hydra.main(config_path="../conf", config_name="build")
 def main(cfg: DictConfig) -> None:
-    log.info("Building dataset")
-    rhs = fill_treatment_template(
-        template_path=cfg.template,
-        treatments_path=cfg.build.treatments_path,
-        query=cfg.build.query,
-        staggered=cfg.build.staggered,
-        min_count_treatments=cfg.build.min_count_treatments,
-        verbose=cfg.build.verbose,
-    )
+    log.info(f"Building dataset using {cfg.build.treat_type}")
+
+    if cfg.build.treat_type == "mtbs":
+        rhs = fill_treatment_template_mtbs(
+            template_path=cfg.template,
+            treatments_path=cfg.build.treatments_path,
+            query=cfg.build.query,
+            staggered=cfg.build.staggered,
+            min_count_treatments=cfg.build.min_count_treatments,
+            verbose=cfg.build.verbose,
+        )
+    elif cfg.build.treat_type == "frp":
+        rhs = fill_treatment_template_frp(
+            template_path=cfg.template,
+            treatments_path=cfg.build.treatments_path,
+            frp=cfg.build.frp,
+        )
+    else:
+        raise ValueError(f"Unknown treatment type: {cfg.build.treat_type}")
 
     log.info("Building LHS: FRP and dNBR")
     lhs = build_lhs(
@@ -36,7 +47,9 @@ def main(cfg: DictConfig) -> None:
     if not os.path.exists(cfg.build.save_path):
         os.mkdir(cfg.build.save_path)
 
-    treatments.to_feather(os.path.join(cfg.build.save_path, "wide_treats.feather"))
+    treatments.to_feather(
+        os.path.join(cfg.build.save_path, f"wide_treats_{cfg.build.treat_type}.feather")
+    )
 
 
 if __name__ == "__main__":

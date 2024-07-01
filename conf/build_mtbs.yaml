@@ -5,9 +5,10 @@ template: "${root_path}/geoms/templates/template.tif"
 
 build:
   template: "${template}"
+  treat_type: mtbs
   treatments_path: "${save_path}/treatments_mtbs.feather"
   query: "Incid_Type != 'Prescribed Fire'"
-  staggered: true
+  staggered: false
   min_count_treatments: 2
   verbose: false
   save_path: "${save_path}/wide_treatments_gee_inmediate"

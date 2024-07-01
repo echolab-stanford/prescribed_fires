@@ -20,7 +20,7 @@ def process_modis_file(
     aoi,
     template_path,
     wide=False,
-    confidence: float = 50.0,
+    confidence_min: float = 30,
 ):
     """Process MODIS file from FIRMS and transform into array format
 
@@ -42,9 +42,11 @@ def process_modis_file(
         Path to the template file to reproject to
     wide : bool
         If True, save the data in wide format with a cumulative sum and count for count the cumulative fire behavior. It will save both wide and long files in feather format.
-    confidence : float
+    confidence_min : float
         Confidence threshold to filter the data. Default is 50. The MODIS data comes with  confidence values from 0 to 100 to describe the level of certainty of the fire detection.
-        See more here: https://modis-fire.umd.edu/files/MODIS_C61_BA_User_Guide_1.1.pdf
+        See more here: https://modis-fire.umd.edu/files/MODIS_C61_BA_User_Guide_1.1.pdf.
+
+        The defaul is 30 as it is the minimum value to consider a fire detection with nominal confidence: https://modis-fire.umd.edu/files/MODIS_C6_Fire_User_Guide_C.pdf
 
     Returns
     -------
@@ -66,9 +68,6 @@ def process_modis_file(
     )  # This is a small trick to make it HH:MM
     df["timestamp"] = pd.to_datetime(df.timestamp)
 
-    # Subset to keep the good pixels with confidence
-    df = df[df["confidence"] >= confidence]
-
     # Transform CSV to geopandas dataframe
     df_points = gpd.GeoDataFrame(
         df,
@@ -85,33 +84,28 @@ def process_modis_file(
     # Spatial join to filter all points out of the aoi
     df_points_proj = sjoin(df_points_proj, aoi, how="inner")
 
+    # Filter by confidence
+    df_points_proj = df_points_proj[df_points_proj["confidence"] >= confidence_min]
+
     year_files = []
     for year in tqdm(
         df_points_proj.timestamp.dt.year.unique(), desc="Array-ing the data"
     ):
-        # Check if file exists, otherwise skip and load from storage
-        file_stem = f"frp_modis_firms_{int(year)}"
-        path_to_save = os.path.join(save_path, f"{file_stem}.nc4")
+        year_df = df_points_proj[df_points_proj.timestamp.dt.year == year]
 
-        if not os.path.exists(path_to_save):
-            year_df = df_points_proj[df_points_proj.timestamp.dt.year == year]
-            # Take the max value of the FRP for each pixel-year
-            year_df = year_df.groupby(
-                ["latitude", "longitude", "geometry"], as_index=False
-            ).frp.max()
+        # Take the max value of the FRP for each pixel-year
+        year_df = year_df.groupby(
+            ["latitude", "longitude", "geometry"], as_index=False
+        ).frp.max()
 
-            frp_year = make_geocube(
-                vector_data=year_df,
-                measurements=["frp"],
-                like=template,
-            )
+        frp_year = make_geocube(
+            vector_data=year_df,
+            measurements=["frp"],
+            like=template,
+        )
 
-            # Save file to avoid re-processing when building other stuff.
-            frp_year.attrs["confidence"] = confidence
-            frp_year = frp_year.rename({"x": "lon", "y": "lat"})
-            frp_year.to_netcdf(path_to_save)
-        else:
-            frp_year = xr.open_dataset(path_to_save)
+        # add confidence as an attribute to the file
+        frp_year = frp_year.rename({"x": "lon", "y": "lat"})
 
         df = frp_year.drop_vars(["spatial_ref"]).to_dataframe().reset_index().dropna()
         df["year"] = year
@@ -129,13 +123,32 @@ def process_modis_file(
 
     # Add count of fires per year in a cummulative way
     concat_data["fire"] = 1
-    concat_data["count_fires"] = concat_data.groupby(["grid_id"]).fire.cumsum()
+    concat_data["confidence_min"] = confidence_min
     concat_data = concat_data.merge(
         template_expanded, on=["grid_id", "year"], how="right"
     )
 
-    # Forward fill all NAs after merge and fill the rest with 0
-    concat_data.update(concat_data.groupby(["grid_id"]).ffill().fillna(0))
+    # Calculate the count of fires and the cumulative sum of FRP to pass
+    # to the balancing function
+    concat_data["count_fires"] = concat_data.groupby(["grid_id"]).fire.transform(
+        "cumsum"
+    )
+
+    concat_data["cummax_frp"] = concat_data.groupby(["grid_id"]).frp.transform("cummax")
+
+    # Fill NaNs with the laterst value (ffil)
+    concat_data["count_fires"] = concat_data.groupby(
+        "grid_id", as_index=False
+    ).count_fires.ffill()
+
+    concat_data["cummax_frp"] = concat_data.groupby(
+        "grid_id", as_index=False
+    ).cummax_frp.ffill()
+
+    # Fill NaNs with 0 and assume no frp is no fire
+    concat_data["count_fires"].fillna(0, inplace=True)
+    concat_data["cummax_frp"].fillna(0, inplace=True)
+    concat_data["frp"].fillna(0, inplace=True)
 
     if wide:
         # Pivot the table to wide format and save to feather
@@ -143,7 +156,7 @@ def process_modis_file(
             concat_data,
             index="grid_id",
             columns="year",
-            values=["count_fires"],
+            values=["count_fires", "cummax_frp"],
         )
         wide_frp.columns = [f"{col}_{idx}" for col, idx in wide_frp.columns]
         wide_frp = wide_frp.reset_index()

@@ -9,7 +9,7 @@ treatments:
   save_path: "${save_path}/treatments_mtbs_spillovers_1000.feather"
   spillovers: true
   threshold: 0.75
-  buffer_treatment: 1000
-  buffer: 10000
+  buffer_treatment: 1_000
+  buffer: 10_000
   pop_raster_path: "${data_path}/population"
   mask: "${root_path}/geoms/california_geom/datacalifornia_geom.shp"

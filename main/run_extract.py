@@ -68,7 +68,7 @@ def main(cfg: DictConfig) -> None:
             save_path=cfg.extract.frp.save_path,
             aoi=cfg.shape_mask,
             template_path=cfg.template,
-            feather=cfg.extract.frp.feather,
+            confidence=cfg.extract.frp.confidence,
             wide=cfg.extract.frp.wide,
         )
 

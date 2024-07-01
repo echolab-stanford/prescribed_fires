@@ -5,7 +5,62 @@ from .report import report_treatments
 from ..utils import prepare_template
 
 
-def fill_treatment_template(
+def fill_treatment_template_frp(frp: str, template_path: str, treatments_path: str):
+    """Aux function to merge template with FRP data and build intensity based treatments
+
+    Just like `fill_treatment_template_mtbs`, but based for FRP. This is using
+    the FRP processed data from `prescribed.extract.process_modis_frp` and will
+    simply select all pixels with FRP > 0 as treated. We will use the MTBS to
+    get Event_IDs, but we will call whatever is not in the MTBS as a "frp_fire_event"
+    and keep in the treatment dataset.
+
+    Parameters:
+    ----------
+        frp (str): Path to the feather file with FRP data
+        template_path (str): Path to the template raster
+        treatments_path (str): Path to the feather file with treatments
+
+    Returns:
+    -------
+        pd.DataFrame: DataFrame with the template filled with treatments and
+        additional columns:
+            - grid_id: Unique identifier for each pixel
+            - year: Year of the observation
+            - frp: max FRP value for each pixel-year
+            - treat: 1 if the pixel is treated, 0 otherwise
+            - Event_ID: Event ID from the MTBS dataset. If the pixel is not in the
+                MTBS dataset, it will be called "frp_fire_event".
+            - lat: Latitude of the pixel
+            - lon: Longitude of the pixel
+    """
+
+    # Load template
+    template_expanded = prepare_template(template_path)
+
+    # Load treatments and FRP data
+    treatments = pd.read_feather(treatments_path).drop(
+        columns=["spatial_ref"], errors="ignore"
+    )
+
+    frp = pd.read_feather(frp).drop(columns=["spatial_ref"], errors="ignore")
+
+    # Remove all no-events in treatments
+    treatments = treatments[treatments["Event_ID"] != "nodata"]
+
+    # Merge with template to clean treatments (they're full of water!)
+    treatments = template_expanded.merge(treatments, on=["lat", "lon", "year"])
+
+    # Merge with MTBS treats and keep all the FRP readings
+    frp = frp.merge(treatments, on=["grid_id", "year"], how="left")
+    frp.loc[(frp.frp > 0) & (frp.Event_ID.isna()), "Event_ID"] = "frp_fire_event"
+
+    # Create treatments columns (here is just fire!)
+    frp["treat"] = np.where(frp.frp > 0, 1, 0)
+
+    return frp
+
+
+def fill_treatment_template_mtbs(
     template_path: str,
     treatments_path: str,
     staggered: bool = False,
@@ -85,7 +140,7 @@ def fill_treatment_template(
         ),
     )
 
-    treatments["count_treats"] = treatments.groupby("grid_id").treat.transform("sum")
+    treatments["count_treats"] = treatments.groupby("grid_id").treat.transform("cumsum")
 
     if staggered:
         # Reduce sample! Only keep the pixels that have only one that treatments
@@ -201,7 +256,8 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
                     (data.dnbr >= 440) & (data.dnbr < 660),
                     data.dnbr >= 660,
                 ]
-                choices = [0, 1, 2, 3, 4]  # This is a mistake! this should start in 1!
+                # zero-index to match the low-intensity level to be 1.
+                choices = [0, 1, 2, 3, 4]
 
                 # Asigning FRP class to each fire
                 data.loc[:, "class_dnbr"] = np.select(
@@ -234,7 +290,7 @@ def treatment_schedule(
     in the original dataset under conditions defined by the user.
 
     Parameters:
-    ----
+    ----------
     treatment_template (pd.DataFrame): DataFrame with the template filled with
         treatments and additional columns:
             - grid_id: Unique identifier for each pixel
@@ -245,6 +301,7 @@ def treatment_schedule(
             - rel_year: Relative year since the first treatment
     treatment_fire (dict): A dictionary with different treatment allocations based
     on severity and intensity classes.
+    no_class (bool): If True, the function will not use the class columns to
 
     Returns:
     -------

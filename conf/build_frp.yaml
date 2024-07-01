@@ -1,0 +1,19 @@
+root_path: "/mnt/sherlock/oak/prescribed_data"
+save_path: "${root_path}/processed"
+data_path: "${root_path}/raw"
+template: "${root_path}/geoms/templates/template.tif"
+
+build:
+  template: "${template}"
+  treat_type: frp
+  frp: "${save_path}/frp/frp_concat.feather"
+  treatments_path: "${save_path}/treatments_mtbs.feather"
+  query: "Incid_Type != 'Prescribed Fire'"
+  save_path: "${save_path}/wide_treatments_gee_inmediate"
+  lhs:
+    frp: 
+      path: ${save_path}/frp/frp_concat.feather
+      classify: true
+    dnbr: 
+      path: ${save_path}/dnbr_gee_inmediate/dnbr_long.feather
+      classify: true
