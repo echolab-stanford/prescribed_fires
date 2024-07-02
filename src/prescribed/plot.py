@@ -200,7 +200,6 @@ def plot_loss_check(path_to_losses, best_model_path):
 
     # Make some space between the axis
     fig.tight_layout()
-    plt.show()
 
     return ax
 
@@ -549,7 +548,7 @@ def data_fire_plot(
 
     Parameters
     ----------
-    wide_treats : gpd.GeoDataFrame
+    wide_treats : pd.DataFrame
         Treatments data
     frp : pd.DataFrame
         FRP data
@@ -611,7 +610,7 @@ def data_fire_plot(
 
         fires["treat_dnbr"] = fires[f"treat_{year}"] * fires[f"class_dnbr_{year}"]
         fires["treat_frp"] = fires[f"treat_{year}"] * fires[f"class_frp_{year}"]
-        fires["treat_severity"] = np.where(fires["treat_dnbr"] == 2, 1, 0)
+        fires["treat_severity"] = np.where(fires["treat_dnbr"] == 1, 1, 0)
         fires["treat_intensity"] = np.where(fires["treat_frp"] == 1, 1, 0)
 
     else:
@@ -630,7 +629,7 @@ def data_fire_plot(
         )
 
         fire["treat_severity"] = np.where(
-            (fire["treat"] * fire["class_dnbr"]) == 2, 1, 0
+            (fire["treat"] * fire["class_dnbr"]) == 1, 1, 0
         )
         fire["treat_intensity"] = np.where(
             (fire["treat"] * fire["class_frp"]) == 1, 1, 0
