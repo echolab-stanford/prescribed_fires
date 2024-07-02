@@ -1,0 +1,19 @@
+path_to_results: "/mnt/sherlock/oak/prescribed_data/results/new_results"
+save_path: "new_best_models_gee_inmediate"
+
+defaults:
+ - _self_
+ - override hydra/job_logging: disabled
+ - override hydra/hydra_logging: disabled
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+estimate:
+  path_results: 
+    dnbr_treatment_conifers: "${path_to_results}/dnbr_gee_inmediate_treatment_conifers"
+    dnbr_treat_shrubs: "${path_to_results}/dnbr_gee_inmediate_treatment_shrublands"
+    frp_treatment_conifers: "${path_to_results}/frp_treatment_conifers"
+    frp_treat_shrubs: "${path_to_results}/frp_treatment_shrublands" 

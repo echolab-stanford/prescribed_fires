@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 def create_treatments(
-    mtbs_shapefile: Union[gpd.GeoDataFrame, str],
+    mtbs_shapefile: Union[gpd.GeoDataFrame, str, None],
     template: str,
     save_path: str,
     spillovers: bool = False,
@@ -86,8 +86,12 @@ def create_treatments(
     cols = ["Event_ID", "Ig_Date", "Incid_Name", "Incid_Type"]
 
     # Read in data frame and filter for California
-    mtbs = gpd.read_file(mtbs_shapefile)
-    mtbs["Ig_Date"] = pd.to_datetime(mtbs["Ig_Date"])
+    if isinstance(mtbs_shapefile, str):
+        mtbs = gpd.read_file(mtbs_shapefile)
+        mtbs["Ig_Date"] = pd.to_datetime(mtbs["Ig_Date"])
+    else:
+        mtbs = mtbs_shapefile.copy()
+        mtbs["Ig_Date"] = pd.to_datetime(mtbs["Ig_Date"])
 
     # Open template as xarray
     template = rioxarray.open_rasterio(template)

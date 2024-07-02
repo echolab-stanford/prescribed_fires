@@ -1,0 +1,7 @@
+path_to_results: "/mnt/sherlock/oak/prescribed_data/results/new_results"
+save_path: "/home/topcat/projects/extract/tyra/frp_treatments_results"
+
+estimate:
+  path_results: 
+    frp_treatment_conifers: "${tyra.path_to_results}/frp_frp_treatment_conifers"
+    frp_treat_shrubs: "${tyra.path_to_results}/frp_frp_treatment_shrublands" 

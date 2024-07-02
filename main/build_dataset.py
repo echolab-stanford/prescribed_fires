@@ -12,7 +12,7 @@ from prescribed.build.build_data import (
 log = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="../conf", config_name="build")
+@hydra.main(config_path="../conf")
 def main(cfg: DictConfig) -> None:
     log.info(f"Building dataset using {cfg.build.treat_type}")
 

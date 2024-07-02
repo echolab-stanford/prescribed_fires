@@ -91,7 +91,7 @@ def run_balancing(
         and 2000 < int(re.findall(r"\d+", col)[0]) < focal_year
     ]
 
-    # Add columns without digists, these are the covariates that are stable in time
+    # Add columns without digits, these are the covariates that are stable in time
     cols_keep += [col for col in df.columns if not re.search(r"\d+", col)]
 
     # Keep columns before focal year

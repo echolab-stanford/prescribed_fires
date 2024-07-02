@@ -3,12 +3,12 @@ import os
 
 import duckdb
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 log = logging.getLogger(__name__)
 
 
-def tyra(path_to_db, save_path):
+def walk_the_runway(path_to_db, save_path):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
@@ -31,6 +31,7 @@ def tyra(path_to_db, save_path):
         """
     ).to_df()
 
+    log.info(f"Saving to {os.path.join(save_path, 'best_model_loss.csv')}")
     best_model_loss.to_csv(os.path.join(save_path, "best_model_loss.csv"), index=False)
 
     best_model_asmd = duckdb.query(
@@ -53,6 +54,7 @@ def tyra(path_to_db, save_path):
         """
     ).to_df()
 
+    log.info(f"Saving to {os.path.join(save_path, 'best_model_asmd.csv')}")
     best_model_asmd.to_csv(os.path.join(save_path, "best_model_asmd.csv"), index=False)
 
     # Save all stadarized differences for the best model (loss and asmd)
@@ -105,14 +107,15 @@ def tyra(path_to_db, save_path):
     return None
 
 
-@hydra.main(config_path="../conf", config_name="tyra")
+@hydra.main(version_base=None, config_path="../conf")
 def run_tyra(cfg: DictConfig) -> None:
-    for key, path in cfg.estimate.path_results.items():
+    print(OmegaConf.to_yaml(cfg))
+    for key, path in cfg.tyra.estimate.path_results.items():
         log.info(f"Processing {key}")
 
-        save_path_conf = os.path.join(cfg.save_path, key)
+        save_path_conf = os.path.join(cfg.tyra.save_path, key)
 
-        tyra(save_path=save_path_conf, path_to_db=path)
+        walk_the_runway(save_path=save_path_conf, path_to_db=path)
 
 
 if __name__ == "__main__":
