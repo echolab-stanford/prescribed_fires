@@ -110,7 +110,7 @@ def walk_the_runway(path_to_db, save_path):
 @hydra.main(version_base=None, config_path="../conf")
 def run_tyra(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
-    for key, path in cfg.tyra.estimate.path_results.items():
+    for key, path in cfg.tyra.path_results.items():
         log.info(f"Processing {key}")
 
         save_path_conf = os.path.join(cfg.tyra.save_path, key)

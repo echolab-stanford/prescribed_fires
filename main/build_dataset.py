@@ -1,7 +1,7 @@
 import os
 import logging
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from prescribed.build.build_data import (
     fill_treatment_template_mtbs,
     fill_treatment_template_frp,
@@ -12,7 +12,11 @@ from prescribed.build.build_data import (
 log = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="../conf")
+@hydra.main(
+    config_path="../conf",
+    version_base=None,
+    config_name="config.yaml",
+)
 def main(cfg: DictConfig) -> None:
     log.info(f"Building dataset using {cfg.build.treat_type}")
 
