@@ -321,7 +321,7 @@ def pooling_estimates(
     max_lags: int = 9,
     year_range: Optional[list] = range(2009, 2023),
     cluster_var: str = "year",
-    weights: Optional[str] = None,
+    freq_weights: Optional[str] = None,
 ) -> pd.DataFrame:
     """Calculate variance/ses for pooled estimators
 
@@ -365,7 +365,7 @@ def pooling_estimates(
             formula=formula,
             data=df,
             family=sm.families.Poisson(link=sm.genmod.families.links.Log()),
-            freq_weights=df[weights] if weights is not None else None,
+            freq_weights=df[freq_weights] if freq_weights is not None else None,
         )
         result_all_years = model_all_years.fit()
 
@@ -389,8 +389,8 @@ def pooling_estimates(
                     formula=formula,
                     data=df[df[cluster_var].isin(jk_sample)],
                     family=sm.families.Poisson(link=sm.families.links.Log()),
-                    freq_weights=df[df[cluster_var].isin(jk_sample)][weights]
-                    if weights is not None
+                    freq_weights=df[df[cluster_var].isin(jk_sample)][freq_weights]
+                    if freq_weights is not None
                     else None,
                 )
                 result = model.fit()
