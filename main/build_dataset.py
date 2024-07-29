@@ -1,7 +1,7 @@
 import os
 import logging
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from prescribed.build.build_data import (
     fill_treatment_template_mtbs,
     fill_treatment_template_frp,
@@ -25,7 +25,6 @@ def main(cfg: DictConfig) -> None:
             template_path=cfg.template,
             treatments_path=cfg.build.treatments_path,
             query=cfg.build.query,
-            staggered=cfg.build.staggered,
             min_count_treatments=cfg.build.min_count_treatments,
             verbose=cfg.build.verbose,
         )

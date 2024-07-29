@@ -4,17 +4,17 @@ This script is a wrapper for the run_balancing function. It prepares the data an
 
 Land-types are defined as a integer:
     1: "Agricultural",
-    2: "Conifer",
-    3: "Conifer-Hardwood",
+    - 2: "Conifer",
+    - 3: "Conifer-Hardwood",
     4: "Developed",
     5: "Exotic Herbaceous",
     6: "Exotic,Tree-Shrub",
     7: "Grassland",
-    8: "Hardwood",
+    - 8: "Hardwood",
     9: "No Data",
     10: "Non-vegetated",
     11: "Riparian",
-    12: "Shrubland",
+     - 12: "Shrubland",
     13: "Sparsely Vegetated"
 """
 
