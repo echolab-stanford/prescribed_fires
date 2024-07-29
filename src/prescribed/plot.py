@@ -279,10 +279,11 @@ def plot_std_diffs_focal_year(
 def plot_outcomes(
     df_conifer,
     df_shrub,
-    var_interest,
     axes_names,
+    var_interest="att",
     cmap_conifer="Oranges",
     cmap_shrub="Blues",
+    colors=("#fdc086", "#a6cee3"),
     order=1,
     dotted=0,
     robust=False,
@@ -292,7 +293,11 @@ def plot_outcomes(
     ax=None,
     label=None,
     pooled=False,
+    **kwargs,
 ):
+    # Colors sep
+    col_a, col_b = colors
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 4))
 
@@ -302,24 +307,24 @@ def plot_outcomes(
         df_shrub = df_shrub.sort_values("year")
 
         df_conifer.plot(
-            x="year", y="coef", color="#fdc086", legend=False, label="Conifers", ax=ax
-        )
-        ax.fill_between(
-            df_shrub["year"],
-            df_shrub["low_ci"],
-            df_shrub["high_ci"],
-            cmap=cmap_shrub,
-            alpha=0.2,
-        )
-
-        df_shrub.plot(
-            x="year", y="coef", color="#a6cee3", legend=False, label="Shurblands", ax=ax
+            x="year", y="coef", color=col_a, legend=False, label="Conifers", ax=ax
         )
         ax.fill_between(
             df_conifer["year"],
             df_conifer["low_ci"],
             df_conifer["high_ci"],
-            cmap=cmap_conifer,
+            color=col_a,
+            alpha=0.2,
+        )
+
+        df_shrub.plot(
+            x="year", y="coef", color=col_b, legend=False, label="Shurblands", ax=ax
+        )
+        ax.fill_between(
+            df_shrub["year"],
+            df_shrub["low_ci"],
+            df_shrub["high_ci"],
+            color=col_b,
             alpha=0.2,
         )
 
@@ -382,22 +387,32 @@ def plot_outcomes(
 
     ax.axhline(dotted, color="black", linestyle="--", c="gray")
 
-    x_lab, y_lab = axes_names
-    ax.set_ylabel(x_lab)
-    ax.set_xlabel(y_lab)
+    # x_lab, y_lab = axes_names
+    # ax.set_ylabel(x_lab)
+    # ax.set_xlabel(y_lab)
 
-    # Add label if passed
-    if label is not None:
-        ax.text(
-            -0.1,
-            1.10,
-            label,
-            transform=ax.transAxes,
-            fontsize=20,
-            fontweight="bold",
-            va="top",
-            ha="right",
-        )
+    # # Add label if passed
+    # if label is not None:
+    #     ax.text(
+    #         -0.1,
+    #         1.10,
+    #         label,
+    #         transform=ax.transAxes,
+    #         fontsize=20,
+    #         fontweight="bold",
+    #         va="top",
+    #         ha="right",
+    #     )
+
+    ax = template_plots(
+        ax,
+        ylab=axes_names[1],
+        xlab=axes_names[0],
+        label=label if label is not None else None,
+        label_vert_pos=None,
+        rotation_x=0,
+        **kwargs,
+    )
 
     return ax
 
@@ -659,6 +674,8 @@ def template_plots(
     vert=None,
     title=None,
     label_vert=None,
+    label_vert_pos=None,
+    rotation_x=0,
 ):
     """Axis template for matplotlib plots.
 
@@ -684,6 +701,15 @@ def template_plots(
         Size of the text in the axis, by default 10
     title : str, optional
         Title of the plot, by default None. Added to the top of the axis.
+    vert : float, optional
+        Add a vertical line to the plot, by default None
+    label_vert : str, optional
+        Label for the vertical line, by default None
+    label_vert_pos : tuple, optional
+        Position for the label of the vertical line, by default None. This is using the data axis,
+        so you should pass the x and y position for the label in data units.
+    rotation_x : int, optional
+        Rotation of the x-axis labels, by default 90
 
     Returns
     -------
@@ -718,7 +744,7 @@ def template_plots(
     if label is not None:
         ax.text(
             -0.1,
-            1.10,
+            1.2,
             label,
             transform=ax.transAxes,
             fontsize=20,
@@ -746,11 +772,11 @@ def template_plots(
         ax.axvline(vert, color="gray", linestyle="--")
 
         if label_vert is not None:
+            x, y = label_vert_pos
             ax.text(
-                vert + 0.01,
-                0.5,
+                x,
+                y,
                 label_vert,
-                transform=ax.transAxes,
                 fontsize=axis_text,
                 color="gray",
                 ha="right",
@@ -758,5 +784,10 @@ def template_plots(
                 verticalalignment="center",
                 horizontalalignment="center",
             )
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(
+        ax.get_xticklabels(), rotation=rotation_x, ha="right", rotation_mode="anchor"
+    )
 
     return ax
