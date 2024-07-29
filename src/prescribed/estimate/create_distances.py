@@ -107,8 +107,9 @@ def create_distances(
 
     Returns
     -------
-    None
-        Saves a Feather file to the save_path
+    pd.DataFrame
+        Saves a Feather file to the save_path and returns a DataFrame with the
+        rasterized data
     """
 
     # Read in data frame and filter for California
@@ -140,7 +141,14 @@ def create_distances(
     if pop_threshold is not None:
         pop_buffer = kwargs.pop("buffer", 30_000)
 
-        pop_dens = calculate_fire_pop_dens(geoms=wildfires, template=template, **kwargs)
+        pop_dens = calculate_fire_pop_dens(
+            geoms=wildfires,
+            pop_raster_path=kwargs["pop_raster_path"],
+            buffer=kwargs.get("buffer", 10_000),
+            date_col=kwargs.get("date_col", "Ig_Date"),
+            mask=kwargs.get("mask", None),
+            template=template,
+        )
 
         # Calculate population threshold and subset geometry
         tresh = pop_dens.total_pop.quantile([pop_threshold]).values[0]
@@ -166,6 +174,7 @@ def create_distances(
     wildfires_meters["donut"] = wildfires_meters["buffer"].difference(
         wildfires_meters["geometry"]
     )
+
     wildfires_meters["boundary"] = wildfires_meters["donut"].boundary
 
     # We are only interested in the outer-ring of the donut boundary, since this

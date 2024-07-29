@@ -17,9 +17,9 @@ def calculate_estimator(
     weights: pd.DataFrame,
     outcomes: Union[pd.DataFrame, str],
     focal_years: list,
-    outcome_var: str,
+    outcome_var: str = None,
     low_treatment_class: dict = {"dnbr": 1},
-    high_class: int = 3,
+    high_class: list = [3],
     scale: Optional[float] = False,
     pooling: Optional[bool] = False,
     **kwargs,
@@ -46,8 +46,9 @@ def calculate_estimator(
         The name of the outcome variable in the `outcomes` dataframe
     low_treatment_class : dict
         The low treatment definition. The key must be the variable in the treatment dataset and the value should be the class number. The default is `{"dnbr": 1}`.
-    lag_up_to : int
-        The maximum lag that we want to calculate the estimator
+    high_class : list
+        The high treatment definition. The default is `[3]`. This is used to calculate the RR estimator. If the list includes `[3, 4, 5]`, this will be the high severity comparison
+        group.
     scale : Optional[float]
         A scaling factor for the estimator. Default is False
     pooling : Optional[bool]
@@ -100,6 +101,20 @@ def calculate_estimator(
         # include the focal year as we want to calculate the ATT for the
         # focal year, this is not true for the RR)
         if isinstance(outcomes, pd.DataFrame):
+            # Create a dummy for fire if the value is above zero. This is true
+            # for the dnbr and frp measurements.
+            try:
+                if (
+                    len(outcome_var.split("_")[0]) > 0
+                    and outcome_var.split("_")[1] == "fire"
+                ):
+                    outcome_var = outcome_var.split("_")[0]
+                    outcomes["fire"] = np.where(outcomes[outcome_var] > 0, 1, 0)
+                    outcome_var = "fire"
+            except IndexError:
+                # This is a raw outcome without a "_fire" suffix, so we are all good!
+                pass
+
             # Filter to get only the treated ones mean value
             treatments_year = treatments_year[treatments_year["treat_class"] == 1]
             outcomes_year = outcomes[
@@ -157,7 +172,7 @@ def calculate_estimator(
             # Sum all units that are not low severity class and just build a
             # year and count dataframe.
             treat_means_df = (
-                treat_agg_sample[treat_agg_sample[column_treat] >= high_class]
+                treat_agg_sample[treat_agg_sample[column_treat].isin(high_class)]
                 .groupby("year", as_index=False)
                 .grid_id.sum()
             )
@@ -259,7 +274,9 @@ def calculate_estimator(
                 # Sum to all that is not low severity class and just build a year
                 # and count dataframe.
                 weighted_outcomes = (
-                    control_agg_sample[control_agg_sample[column_treat] >= high_class]
+                    control_agg_sample[
+                        control_agg_sample[column_treat].isin(high_class)
+                    ]
                     .groupby("year", as_index=False)
                     .weights.sum()
                 )
