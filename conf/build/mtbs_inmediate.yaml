@@ -1,8 +1,10 @@
 template: "${template}"
-treat_type: frp
-frp: "${save_path}/frp_nominal_conf/frp_concat.feather"
+treat_type: mtbs
 treatments_path: "${save_path}/treatments_mtbs.feather"
 query: "Incid_Type != 'Prescribed Fire'"
+staggered: false
+min_count_treatments: 2 # This is irrelevant here as staggered is false
+verbose: false
 save_path: "${save_path}/wide_treatments_gee_inmediate"
 lhs:
   frp: 

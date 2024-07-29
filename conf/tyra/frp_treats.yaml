@@ -1,6 +1,8 @@
-path_to_results: "/mnt/sherlock/oak/prescribed_data/results/new_results"
-save_path: "/home/topcat/projects/extract/tyra/frp_treatments_results"
+path_to_results: "/mnt/sherlock/oak/prescribed_data/results"
+save_path: "tyra/frp_treatments_results"
 
 path_results: 
   frp_treatment_conifers: "${tyra.path_to_results}/frp_frp_treatment_conifers"
-  frp_treat_shrubs: "${tyra.path_to_results}/frp_frp_treatment_shrublands" 
+  frp_treat_shrubs: "${tyra.path_to_results}/frp_frp_treatment_shrublands"
+  frp_treatment_hardwood: "${tyra.path_to_results}/frp_frp_treatment_hardwood"
+  frp_treatment_coniferhardwood: "${tyra.path_to_results}/frp_frp_treatment_coniferhardwood"

@@ -1,0 +1,6 @@
+path_to_results: "/mnt/sherlock/oak/prescribed_data/results"
+save_path: "tyra/mtbs_treatments_results_inmediate"
+
+path_results: 
+  dnbr_treatment_conifers: "${tyra.path_to_results}/mtbs_dnbr_inmediate_treatment_conifers"
+  dnbr_treat_shrubs: "${tyra.path_to_results}/mtbs_dnbr_inmediate_treatment_shrublands"
