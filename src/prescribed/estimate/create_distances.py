@@ -139,8 +139,6 @@ def create_distances(
 
     # Sample polygons by population ("remoteness")
     if pop_threshold is not None:
-        pop_buffer = kwargs.pop("buffer", 30_000)
-
         pop_dens = calculate_fire_pop_dens(
             geoms=wildfires,
             pop_raster_path=kwargs["pop_raster_path"],
@@ -175,22 +173,6 @@ def create_distances(
         wildfires_meters["geometry"]
     )
 
-    wildfires_meters["boundary"] = wildfires_meters["donut"].boundary
-
-    # We are only interested in the outer-ring of the donut boundary, since this
-    # is the ring that defines the treatment, so we will subset to that ring only
-    # we use apply here because some of the donuts are MultiPolygon objects because
-    # of small differences in geometries.
-    wildfires_meters["boundary_outer"] = wildfires_meters["boundary"].apply(
-        lambda x: list(x.geoms)[0]
-    )
-
-    # Now we build a buffer around the outer-ring of the donut, which is the control
-    # area. This area will be as big as the population buffer and can potentially
-    # overlap with other control/treatment areas. The proximity function will pick
-    # the closest geometry to the pixel in the raster.
-    wildfires_meters["all"] = wildfires_meters["geometry"].buffer(pop_buffer)
-
     # Loop through each year and rasterize the polygons. We cannot execute this
     # operation in all the years, since we want to calculate the distance to the
     # closest treatment for each pixel in the year of the fire, so we do not have
@@ -212,6 +194,21 @@ def create_distances(
 
         df_wildfire = transform_to_category(wildfire_polygons, var_name="wildfire")
 
+        # Use geocube to rasterize the fire boundary
+        data["geometry"] = (
+            data.geometry.boundary.values
+        )  # gpd.set_geometry() not working
+
+        wildfire_boundaries = make_geocube(
+            vector_data=data,
+            measurements=["Event_ID"],
+            like=template,
+            categorical_enums=enums,
+            rasterize_function=partial(rasterize_image, all_touched=True),
+        )
+
+        df_boundaries = transform_to_category(wildfire_boundaries, var_name="boundary")
+
         # Use geocube to rasterize the shapefile donuts (buffer around fires)
         data["geometry"] = data["donut"].values  # gpd.set_geometry() not working
         wildfire_polygons = make_geocube(
@@ -222,29 +219,7 @@ def create_distances(
             rasterize_function=partial(rasterize_image, all_touched=True),
         )
 
-        df_buffer = transform_to_category(wildfire_polygons, var_name="treatment")
-
-        # Get the event_id identifier for all the setting: wildfire, donut and outer boundary
-        data["geometry"] = data["all"].values  # gpd.set_geometry() not working
-        wildfire_polygons = make_geocube(
-            vector_data=data,
-            measurements=["Event_ID"],
-            like=template,
-            categorical_enums=enums,
-            rasterize_function=partial(rasterize_image, all_touched=True),
-        )
-
-        df_all = transform_to_category(wildfire_polygons, var_name="all")
-
-        # Use geocube to rasterize the shapefile boundaries (needed for proximity)
-        data["geometry"] = data["boundary_outer"].values
-        wildfire_boundaries = make_geocube(
-            vector_data=data,
-            measurements=["Event_ID"],
-            like=template,
-            categorical_enums=enums,
-            rasterize_function=partial(rasterize_image, all_touched=True),
-        )
+        df_donut = transform_to_category(wildfire_polygons, var_name="donut")
 
         # Calculate distance (proximity) to each event in loop year
         wildfire_boundaries = xr.where(
@@ -253,7 +228,7 @@ def create_distances(
 
         dist_arr = proximity(
             wildfire_boundaries.Event_ID,
-            max_distance=pop_buffer,
+            max_distance=buffer_treatment,
             distance_metric="EUCLIDEAN",
         )
 
@@ -271,10 +246,14 @@ def create_distances(
         # Merge all data frames on lat/lon with reduce and add the year
         merged = reduce(
             lambda left, right: pd.merge(left, right, on=["lat", "lon"], how="outer"),
-            [df_wildfire, df_buffer, df_dist, df_all],
+            [df_wildfire, df_boundaries, df_donut, df_dist],
         )
         merged["year"] = data.year.unique()[0]
 
+        # Remove the wildfire polygons from the distances
+        merged = merged[merged["wildfire"] == "nodata"]
+
+        # Append to list
         data_list_wildfire.append(merged)
 
     # Concatenate all data frames
@@ -290,8 +269,17 @@ def create_distances(
     )
     data_wildfire = data_wildfire.merge(template_df, on=["lat", "lon"], how="left")
 
-    # Get negative distances when grid is inside any of the rasterized treatments
-    data_wildfire.loc[data_wildfire["wildfire"] != "nodata", "distance"] = np.nan
-    data_wildfire.loc[data_wildfire["treatment"] != "nodata", "distance"] *= -1
+    # Just return the right stuff (the buffer/donut distances)
+    data_wildfire = data_wildfire[
+        [
+            "grid_id",
+            "lat",
+            "lon",
+            "year",
+            "donut",
+            "wildfire",
+            "distance",
+        ]
+    ]
 
     return data_wildfire
