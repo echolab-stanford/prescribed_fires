@@ -152,7 +152,7 @@ def generate_run_id(parameters):
 def calculate_fire_pop_dens(
     geoms: gpd.GeoDataFrame,
     pop_raster_path: Union[dict, str],
-    buffer: int = 10000,
+    buffer: int = 10_000,
     date_col: str = "Ig_Date",
     mask: Optional[Union[gpd.GeoDataFrame, str]] = None,
     template: Optional[xr.core.dataarray.DataArray] = None,
