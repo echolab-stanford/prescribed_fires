@@ -98,7 +98,9 @@ def create_distances(
     save_path : str
         Path to save the resulting output
     pop_threshold : Optional[float], optional
-        The percentile to filter the population density, by default 0.5
+        The percentile to filter the population density, by default 0.5. Thus, if
+        this value is not changed, we are going to keep all the units under the
+        median population density.
     buffer_treatment : Optional[int], optional
         The buffer distance in meters for the treatment definition, by default
         10000
