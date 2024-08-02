@@ -7,7 +7,7 @@ from joblib import Parallel, delayed
 from prescribed.utils import tqdm_joblib
 from tqdm import tqdm
 
-from .create_distances import create_distances
+from ..build.create_distances import create_distances
 from .rdrobust import rdplot, rdrobust
 
 
