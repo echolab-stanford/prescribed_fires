@@ -91,7 +91,9 @@ def run_balancing_spillovers(
     id_col = id_col[w == 0]
 
     # Drop grid_id and treatment and some columns that we don't need!
-    df = df.drop(columns=[row_id, "distance", "donut", "boundary"])
+    df = df.drop(
+        columns=[row_id, "distance", "donut", "wildfire", "lat", "lon"], errors="ignore"
+    )
 
     # Select columns to drop for balancing (all after the focal year and the min year)
     cols_keep = [
@@ -175,7 +177,9 @@ def run_balancing_spillovers(
             model_run_id=run_id,
             focal_year=focal_year,
         )
-        df_loss = df_loss.assign(**extra_dict_elements)
+
+        if extra_dict_elements is not None:
+            df_loss = df_loss.assign(**extra_dict_elements)
 
         if save_path:
             if not os.path.exists(save_path):

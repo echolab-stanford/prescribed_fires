@@ -209,6 +209,15 @@ def plot_std_diffs_focal_year(
 ):
     """Plot Standarized Mean Differences for a specific focal year"""
 
+    # Create covar family if is not there
+    if "family_covar" not in std_diffs.columns:
+        # Create a covar family for some of the variables that are timeseries
+        # Add family_covar column to the dataframe to aggregate covariates
+        std_diffs["family_covar"] = [
+            "_".join([i for i in c.split("_") if not i.isdigit()])
+            for c in std_diffs.covar.tolist()
+        ]
+
     std_diffs_year = std_diffs[std_diffs.focal_year == focal_year]
 
     # Group by family_covar and focal_year

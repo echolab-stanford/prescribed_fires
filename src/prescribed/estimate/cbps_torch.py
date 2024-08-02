@@ -186,7 +186,7 @@ class CBPS:
             ax.set_xlabel("Unweighted Standardized Differences")
         return ax
 
-    def diagnose_loss(self, ax):
+    def diagnose_loss(self, ax=None):
         """Plot loss function for each regularization level."""
 
         if not ax:
