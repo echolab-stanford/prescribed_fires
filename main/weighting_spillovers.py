@@ -1,21 +1,6 @@
 """Run balancing for a focal year and a specific land type
 
-This script is a wrapper for the run_balancing function. It prepares the data and runs the balancing for a specific land type.
-
-Land-types are defined as a integer:
-    1: "Agricultural",
-    - 2: "Conifer",
-    - 3: "Conifer-Hardwood",
-    4: "Developed",
-    5: "Exotic Herbaceous",
-    6: "Exotic,Tree-Shrub",
-    7: "Grassland",
-    - 8: "Hardwood",
-    9: "No Data",
-    10: "Non-vegetated",
-    11: "Riparian",
-     - 12: "Shrubland",
-    13: "Sparsely Vegetated"
+This script is a wrapper for the run_balancing function. It prepares the data and runs the balancing for a specific spillover distance.
 """
 
 import logging
@@ -87,8 +72,6 @@ def main(cfg: DictConfig) -> None:
     run_balancing_spillovers(
         df=df.dropna(),
         focal_year=cfg.balancing.focal_year,
-        treat_col=f"treat_{cfg.balancing.focal_year}",
-        class_col=f"class_{cfg.balancing.treatment}_{cfg.balancing.focal_year}",
         row_id=cfg.balancing.row_id,
         reg_list=cfg.balancing.reg,
         lr_list=cfg.balancing.lr,
@@ -97,6 +80,7 @@ def main(cfg: DictConfig) -> None:
         metrics=cfg.balancing.metrics,
         save_path=cfg.balancing.save_path,
         distance_treatment=cfg.balancing.distance_treatment,
+        extra_dict_elements={"distance": cfg.balancing.distance_treatment},
     )
 
     log.info("Finish with balancing. All files are saved and CV is done!")
