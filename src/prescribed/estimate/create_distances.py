@@ -128,6 +128,15 @@ def create_distances(
     else:
         wildfires = mtbs_shapefile
 
+    # Get grid_ids from template and merge with each year later
+    template_df = (
+        prepare_template(template)
+        .groupby("grid_id", as_index=False)
+        .first()
+        .reset_index(drop=True)
+        .drop(columns=["year"], errors="ignore")
+    )
+
     # Open template as xarray
     if isinstance(template, str):
         template = rioxarray.open_rasterio(template)
@@ -242,34 +251,26 @@ def create_distances(
             dist_arr.to_dataframe(name="distance")
             .reset_index()
             .drop(columns=["spatial_ref"], errors="ignore")
-            .dropna()
         )
 
         # Merge all data frames on lat/lon with reduce and add the year
         merged = reduce(
-            lambda left, right: pd.merge(left, right, on=["lat", "lon"], how="outer"),
+            lambda left, right: pd.merge(left, right, on=["lat", "lon"], how="inner"),
             [df_wildfire, df_boundaries, df_donut, df_dist],
         )
         merged["year"] = data.year.unique()[0]
 
         # Remove the wildfire polygons from the distances
-        merged = merged[merged["wildfire"] == "nodata"]
+        merged.loc[merged["wildfire"] != "nodata", "distance"] = np.nan
+
+        # Merge with template
+        merged = merged.merge(template_df, on=["lat", "lon"], how="right")
 
         # Append to list
         data_list_wildfire.append(merged)
 
     # Concatenate all data frames
     data_wildfire = pd.concat(data_list_wildfire)
-
-    # Merge with template to get grid_id
-    template_df = (
-        prepare_template(template)
-        .groupby("grid_id", as_index=False)
-        .first()
-        .reset_index(drop=True)
-        .drop(columns=["year"], errors="ignore")
-    )
-    data_wildfire = data_wildfire.merge(template_df, on=["lat", "lon"], how="left")
 
     # Just return the right stuff (the buffer/donut distances)
     data_wildfire = data_wildfire[
