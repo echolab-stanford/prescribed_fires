@@ -1,0 +1,13 @@
+treats_long: "${save_path}/distance_treatments/wildfire_distances_20000.feather"
+dict_paths:
+  frp: ${save_path}/frp/frp_wide.feather
+  disturbances: ${save_path}/disturbances/disturbances_wide.feather
+  dem: ${save_path}/dem/dem.feather
+  land_type: ${save_path}/land_type/land_type.feather
+  prism: ${save_path}/prism/prism_processed_wide.feather
+  vegetation: ${save_path}/vegetation/frac_vegetation_wide.feather
+distance_treatment: 5000
+focal_year: 2020
+row_id: "grid_id"
+intercept: true
+save_path: "./test_models"

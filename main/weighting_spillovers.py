@@ -58,13 +58,17 @@ def prepare_data(dict_paths, treats_long, focal_year):
     return df
 
 
-@hydra.main(version_base=None, config_path="../conf", config_name="spillovers")
+@hydra.main(
+    config_path="../conf",
+    version_base=None,
+    config_name="config.yaml",
+)
 def main(cfg: DictConfig) -> None:
     log.info("Building dataset")
     # Prepare data
     df = prepare_data(
-        dict_paths=cfg.data.dict_paths,
-        treats_long=cfg.data.treats_long,
+        dict_paths=cfg.balancing.dict_paths,
+        treats_long=cfg.balancing.treats_long,
         focal_year=cfg.balancing.focal_year,
     )
 
@@ -73,11 +77,11 @@ def main(cfg: DictConfig) -> None:
         df=df.dropna(),
         focal_year=cfg.balancing.focal_year,
         row_id=cfg.balancing.row_id,
-        reg_list=cfg.balancing.reg,
-        lr_list=cfg.balancing.lr,
+        reg_list=cfg.optim.reg,
+        lr_list=cfg.optim.lr,
         intercept=cfg.balancing.intercept,
-        niter=cfg.balancing.niter,
-        metrics=cfg.balancing.metrics,
+        niter=cfg.optim.niter,
+        metrics=cfg.optim.metrics,
         save_path=cfg.balancing.save_path,
         distance_treatment=cfg.balancing.distance_treatment,
         extra_dict_elements={"distance": cfg.balancing.distance_treatment},

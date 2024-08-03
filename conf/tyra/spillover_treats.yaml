@@ -1,5 +1,11 @@
-path_to_results: "/home/topcat/projects/extract/test_models"
+path_to_results: "/home/topcat/projects/extract"
 save_path: "/home/topcat/projects/extract/tyra"
 
 path_results: 
-  treatment_spillovers_test: "${tyra.path_to_results}"
+  treatment_spillovers_2000: "${tyra.path_to_results}/test_models_2000"
+  treatment_spillovers_3000: "${tyra.path_to_results}/test_models_3000"
+  treatment_spillovers_4000: "${tyra.path_to_results}/test_models_4000"
+  treatment_spillovers_5000: "${tyra.path_to_results}/test_models_5000"
+  treatment_spillovers_10000: "${tyra.path_to_results}/test_models_10000"
+  treatment_spillovers_12000: "${tyra.path_to_results}/test_models_12000"
+  treatment_spillovers_13000: "${tyra.path_to_results}/test_models_13000"
