@@ -10,6 +10,7 @@ Event: CA3607412018819840329 will be converted to 3607412018819840329
 Each year will be a dimension in the NetCDF file.
 """
 
+import os
 import logging
 from functools import partial, reduce
 from typing import Optional, Union
@@ -284,5 +285,15 @@ def create_distances(
             "distance",
         ]
     ]
+
+    if save_path:
+        # Create directory if it does not exist
+        os.makedirs(save_path, exist_ok=True)
+
+        path_file = os.path.join(
+            save_path, f"wildfire_distances_{buffer_treatment}.feather"
+        )
+        data_wildfire.to_feather(path_file)
+        log.info(f"Data saved to {save_path}")
 
     return data_wildfire
