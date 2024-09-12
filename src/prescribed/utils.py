@@ -17,19 +17,19 @@ import contextlib
 def expand_grid(dict_vars):
     """Create cartesian product of a set of vectors and return a datafarme
 
-        This function calculates the cartesian product of a set of vectors and
-        return a tabular data structure, just as R's expand.grid function.
-    a
-        Parameters
-        ----------
-        dict_vars : dict
-            Dictionary containing the vectors to be combined. The keys are the
-            column names and the values are the vectors.
+    This function calculates the cartesian product of a set of vectors and
+    return a tabular data structure, just as R's expand.grid function.
 
-        Returns
-        -------
-        pandas.DataFrame
-            Dataframe containing the cartesian product of the vectors
+    Parameters
+    ----------
+    dict_vars : dict
+        Dictionary containing the vectors to be combined. The keys are the
+        column names and the values are the vectors.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Dataframe containing the cartesian product of the vectors
     """
     mesh = np.meshgrid(*dict_vars.values())
     data_dict = {var: m.flatten() for var, m in zip(dict_vars.keys(), mesh)}
@@ -120,7 +120,7 @@ def prepare_template(template_path, years=[2000, 2023]):
     template_df = (
         template.rename({"x": "lon", "y": "lat"})
         .to_dataframe(name="id_template")
-        .reset_index()
+        .reset_index()  # Notice this change the number of grid_id as we drop the NaNs
         .dropna()
     )
     template_df["grid_id"] = template_df.index
@@ -131,7 +131,10 @@ def prepare_template(template_path, years=[2000, 2023]):
     # Create grid for all years in the sample: cartesian product of time and
     # observations
     template_expanded = expand_grid(
-        {"grid_id": template_df.grid_id, "year": np.arange(years[0], years[1] + 1)}
+        {
+            "grid_id": template_df.grid_id,
+            "year": np.arange(years[0], years[1] + 1),
+        }
     )
 
     # Add lat and lon to the expanded grid
@@ -210,7 +213,9 @@ def calculate_fire_pop_dens(
         for key, val in pop_raster_path.items():
             ds_attrs = val.attrs
 
-            ds_mask = val.rio.clip(mask.geometry.values, drop=True, invert=False)
+            ds_mask = val.rio.clip(
+                mask.geometry.values, drop=True, invert=False
+            )
 
             if template is not None:
                 # Reproject the mask to the template
@@ -219,7 +224,9 @@ def calculate_fire_pop_dens(
                 ds_mask = ds_mask.rio.reproject(3310)
 
             # Mask the population raster with np.nan for population outside the mask
-            ds_mask = xr.where(ds_mask == ds_attrs["_FillValue"], np.nan, ds_mask)
+            ds_mask = xr.where(
+                ds_mask == ds_attrs["_FillValue"], np.nan, ds_mask
+            )
             ds_mask = ds_mask.rio.write_crs(3310)
 
             pop_raster_path[key] = ds_mask
@@ -244,7 +251,9 @@ def calculate_fire_pop_dens(
 
     pop_dens_geom = []
     for _, row in tqdm(
-        geoms.iterrows(), total=geoms.shape[0], desc="Calculating population density..."
+        geoms.iterrows(),
+        total=geoms.shape[0],
+        desc="Calculating population density...",
     ):
         # Open the raster and crop to the geometry
         ds = pop_raster_path[row["pop_raster_year"]].squeeze()

@@ -1,9 +1,9 @@
 import os
+from functools import reduce
 from pathlib import Path
-
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
-import geopandas as gpd
 import pandas as pd
 import seaborn as sns
 from geopandas.tools import sjoin
@@ -11,7 +11,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PolynomialFeatures
-from functools import reduce
 
 
 def annotate_axes(ax, text, fontsize=18):
@@ -47,7 +46,7 @@ def plot_std_diffs(
 
     Parameters
     ----------
-    std_diffs_df : pd.DataFrame
+    std_diffs_df : pd.DataFrame or str
         DataFrame with the Standarized Absolute Mean Differences
     palette : str
         Color palette to use in the plot
@@ -73,6 +72,10 @@ def plot_std_diffs(
     fig : matplotlib.figure.Figure
         Figure object
     """
+
+    # Open file if a dataframe is not passed
+    if isinstance(std_diffs_df, str):
+        std_diffs_df = pd.read_csv(std_diffs_df)
 
     # Create a covar family for some of the variables that are timeseries
     # Add family_covar column to the dataframe to aggregate covariates
@@ -131,7 +134,9 @@ def plot_std_diffs(
 
     # Add the labels to the x and y axis using the family_covar and focal_year from the std_diffs_grouped dataframe. The x labels should be in the bottom of the plot
     if labels_x:
-        ax.set_xticks(np.arange(len(sorted_arr.columns)), labels=sorted_arr.columns)
+        ax.set_xticks(
+            np.arange(len(sorted_arr.columns)), labels=sorted_arr.columns
+        )
     else:
         ax.set_xticks([])
 
@@ -142,7 +147,10 @@ def plot_std_diffs(
 
     # Rotate the tick labels and set their alignment.
     plt.setp(
-        ax.get_xticklabels(), rotation=rotation_x, ha="right", rotation_mode="anchor"
+        ax.get_xticklabels(),
+        rotation=rotation_x,
+        ha="right",
+        rotation_mode="anchor",
     )
 
     # Remove the box (frame) around the plot
@@ -201,6 +209,13 @@ def plot_loss_check(path_to_losses, best_model_path):
     # Make some space between the axis
     fig.tight_layout()
 
+    # Apply the template
+    for ax in ax.flatten():
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_position(("outward", 10))
+        ax.spines["bottom"].set_position(("outward", 10))
+
     return ax
 
 
@@ -235,7 +250,9 @@ def plot_std_diffs_focal_year(
     )
 
     if drop_vars is not None:
-        std_diffs_year = std_diffs_year[~std_diffs_year.family_covar.isin(drop_vars)]
+        std_diffs_year = std_diffs_year[
+            ~std_diffs_year.family_covar.isin(drop_vars)
+        ]
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -316,7 +333,12 @@ def plot_outcomes(
         df_shrub = df_shrub.sort_values("year")
 
         df_conifer.plot(
-            x="year", y="coef", color=col_a, legend=False, label="Conifers", ax=ax
+            x="year",
+            y="coef",
+            color=col_a,
+            legend=False,
+            label="Conifers",
+            ax=ax,
         )
         ax.fill_between(
             df_conifer["year"],
@@ -327,7 +349,12 @@ def plot_outcomes(
         )
 
         df_shrub.plot(
-            x="year", y="coef", color=col_b, legend=False, label="Shurblands", ax=ax
+            x="year",
+            y="coef",
+            color=col_b,
+            legend=False,
+            label="Shurblands",
+            ax=ax,
         )
         ax.fill_between(
             df_shrub["year"],
@@ -350,7 +377,9 @@ def plot_outcomes(
             colorbar=False,
         )
 
-        df_shrub[(df_shrub.lag >= 0) & (df_shrub.focal_year <= 2021)].plot.scatter(
+        df_shrub[
+            (df_shrub.lag >= 0) & (df_shrub.focal_year <= 2021)
+        ].plot.scatter(
             x="lag",
             y=var_interest,
             c="focal_year",
@@ -366,7 +395,7 @@ def plot_outcomes(
             data=df_conifer[(df_conifer.focal_year <= 2021)],
             scatter=False,
             ax=ax,
-            color="#fdc086",
+            color="#7fc97f",
             label="Conifers",
             order=order,
             lowess=lowess,
@@ -379,7 +408,7 @@ def plot_outcomes(
             data=df_shrub[(df_shrub.focal_year <= 2021)],
             scatter=False,
             ax=ax,
-            color="#a6cee3",
+            color="#beaed4",
             label="Shrublands",
             order=order,
             lowess=lowess,
@@ -396,29 +425,11 @@ def plot_outcomes(
 
     ax.axhline(dotted, color="black", linestyle="--", c="gray")
 
-    # x_lab, y_lab = axes_names
-    # ax.set_ylabel(x_lab)
-    # ax.set_xlabel(y_lab)
-
-    # # Add label if passed
-    # if label is not None:
-    #     ax.text(
-    #         -0.1,
-    #         1.10,
-    #         label,
-    #         transform=ax.transAxes,
-    #         fontsize=20,
-    #         fontweight="bold",
-    #         va="top",
-    #         ha="right",
-    #     )
-
     ax = template_plots(
         ax,
         ylab=axes_names[1],
         xlab=axes_names[0],
         label=label if label is not None else None,
-        label_vert_pos=None,
         rotation_x=0,
         **kwargs,
     )
@@ -476,7 +487,9 @@ def get_best_poly_fit(X, y, degrees=np.arange(1, 10), min_rmse=1e10, min_deg=0):
 
         # Calculate the predicted value with the best polynomial fit for an X of 1.25
         if deg == min_deg:
-            best_poly_predict = poly_reg.predict(poly_features.fit_transform([[1.25]]))
+            best_poly_predict = poly_reg.predict(
+                poly_features.fit_transform([[1.25]])
+            )
 
     return {
         "degrees": degrees,
@@ -564,11 +577,15 @@ def run_fit_curve(data, x_col, y_col, by, cmap, ax=None, plot=True, **kwargs):
 def data_fire_plot(
     wide_treats, frp, dnbr, emissions, year=None, event_id=None, mtbs=None
 ):
-    """Util function to build a dataframe ready for plotting combining data sources
+    """Util function to build a dataframe ready for plotting combining data
+    sources
 
-    This function will read the treatments and DVs (FRP and dNBR) to build a dataframe ready for plotting. This includes several steps:
+    This function will read the treatments and DVs (FRP and dNBR) to build a
+    dataframe ready for plotting. This includes several steps:
       - Merge data sources before adding year and grid_id if is not there
-      - Filter by year and return complete dataframe as a gpd.GeoDataFrame ready for plotting. If no year is passed, it will return the complete dataframe without treatments by year.
+      - Filter by year and return complete dataframe as a gpd.GeoDataFrame ready
+        for plotting. If no year is passed, it will return the complete
+        dataframe without treatments by year.
 
     Parameters
     ----------
@@ -579,9 +596,11 @@ def data_fire_plot(
     dnbr : pd.DataFrame
         dNBR data
     year : int
-        Year to filter. If None, it will return the complete dataframe without treatments by year
+        Year to filter. If None, it will return the complete dataframe without
+        treatments by year
     event_id : str
-        Event ID to filter. If None, it will return the complete dataframe without treatments by year
+        Event ID to filter. If None, it will return the complete dataframe
+        without treatments by year
     mtbs : gpd.GeoDataFrame
         MTBS data
 
@@ -614,7 +633,9 @@ def data_fire_plot(
         emissions = pd.read_feather(emissions)
 
     if year is not None:
-        id_cols_year = [f"{col}_{y}" for col, y in zip(id_cols, [year] * len(id_cols))]
+        id_cols_year = [
+            f"{col}_{y}" for col, y in zip(id_cols, [year] * len(id_cols))
+        ]
 
         test_treats = wide_treats.reset_index()[id_cols_year + ["grid_id"]]
         test_treats["year"] = year
@@ -622,7 +643,9 @@ def data_fire_plot(
         # Merge with dnbr and frp
         frp_year = frp[frp.year == year]
         dnbr_year = dnbr[dnbr.year == year].drop(columns=["lat", "lon"])
-        emissions_year = emissions[emissions.year == year].drop(columns=["lat", "lon"])
+        emissions_year = emissions[emissions.year == year].drop(
+            columns=["lat", "lon"]
+        )
 
         fires = frp_year.merge(dnbr_year, on=["grid_id", "year"])
 
@@ -632,7 +655,9 @@ def data_fire_plot(
         # Merge with the emissions
         fires = fires.merge(emissions_year, on=["grid_id", "year"], how="left")
 
-        fires["treat_dnbr"] = fires[f"treat_{year}"] * fires[f"class_dnbr_{year}"]
+        fires["treat_dnbr"] = (
+            fires[f"treat_{year}"] * fires[f"class_dnbr_{year}"]
+        )
         fires["treat_frp"] = fires[f"treat_{year}"] * fires[f"class_frp_{year}"]
         fires["treat_severity"] = np.where(fires["treat_dnbr"] == 1, 1, 0)
         fires["treat_intensity"] = np.where(fires["treat_frp"] == 1, 1, 0)
@@ -678,6 +703,7 @@ def template_plots(
     no_axis=False,
     log_y=False,
     label=None,
+    label_pos=(-0.1, 1.2),
     axis_text=10,
     label_axis=12,
     vert=None,
@@ -688,7 +714,9 @@ def template_plots(
 ):
     """Axis template for matplotlib plots.
 
-    This function takes a matplotlib axis and modifies it to make it look nicer and also to make plotting more succint than passing all these parameters every time we make a plot.
+    This function takes a matplotlib axis and modifies it to make it look nicer
+    and also to make plotting more succint than passing all these parameters
+    every time we make a plot.
 
     Parameters
     ----------
@@ -705,7 +733,8 @@ def template_plots(
     log_y : bool, optional
         Add log-scale in y-axis, by default False
     label : str, optional
-        Add label to plot (left-top corner), by default None. If passed, you should pass a letter only.
+        Add label to plot (left-top corner), by default None. If passed, you
+        should pass a letter only.
     axis_text : int, optional
         Size of the text in the axis, by default 10
     title : str, optional
@@ -715,8 +744,9 @@ def template_plots(
     label_vert : str, optional
         Label for the vertical line, by default None
     label_vert_pos : tuple, optional
-        Position for the label of the vertical line, by default None. This is using the data axis,
-        so you should pass the x and y position for the label in data units.
+        Position for the label of the vertical line, by default None. This is
+        using the data axis, so you should pass the x and y position for the
+        label in data units.
     rotation_x : int, optional
         Rotation of the x-axis labels, by default 90
 
@@ -751,9 +781,10 @@ def template_plots(
 
     # Add label to plot (left-top corner)
     if label is not None:
+        label_x, label_y = label_pos
         ax.text(
-            -0.1,
-            1.2,
+            label_x,
+            label_y,
             label,
             transform=ax.transAxes,
             fontsize=20,
@@ -796,7 +827,10 @@ def template_plots(
 
     # Rotate the tick labels and set their alignment.
     plt.setp(
-        ax.get_xticklabels(), rotation=rotation_x, ha="right", rotation_mode="anchor"
+        ax.get_xticklabels(),
+        rotation=rotation_x,
+        ha="right",
+        rotation_mode="anchor",
     )
 
     return ax

@@ -92,7 +92,8 @@ def run_balancing_spillovers(
 
     # Drop grid_id and treatment and some columns that we don't need!
     df = df.drop(
-        columns=[row_id, "distance", "donut", "wildfire", "lat", "lon"], errors="ignore"
+        columns=[row_id, "distance", "donut", "wildfire", "lat", "lon"],
+        errors="ignore",
     )
 
     # Select columns to drop for balancing (all after the focal year and the min year)
@@ -194,7 +195,9 @@ def run_balancing_spillovers(
                 os.path.join(save_path, "results", f"results_{run_id}.parquet")
             )
             std_diffs_df.to_parquet(
-                os.path.join(save_path, "std_diffs", f"std_diffs_{run_id}.parquet")
+                os.path.join(
+                    save_path, "std_diffs", f"std_diffs_{run_id}.parquet"
+                )
             )
             df_loss.to_parquet(
                 os.path.join(save_path, "loss", f"loss_{run_id}.parquet")

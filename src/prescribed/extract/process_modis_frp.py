@@ -1,5 +1,4 @@
 import os
-import pdb
 import logging
 import pandas as pd
 import geopandas as gpd
@@ -115,8 +114,8 @@ def process_modis_file(
     template_expanded = prepare_template(template_path)
 
     # Concatenate all the data and merge with the template
-    concat_data = pd.concat(year_files)
-    concat_data = concat_data.merge(template_expanded, on=["lat", "lon", "year"])
+    concat_data_raw = pd.concat(year_files)
+    concat_data = concat_data_raw.merge(template_expanded, on=["lat", "lon", "year"])
 
     # Drop lat and lon columns temporarily to avoid double columns
     concat_data = concat_data.drop(columns=["lat", "lon"])
