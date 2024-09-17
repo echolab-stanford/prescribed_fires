@@ -1,17 +1,17 @@
+import contextlib
 import hashlib
+from itertools import zip_longest
 from pathlib import Path
 from typing import Optional, Union
 
 import geopandas as gpd
+import joblib
 import numpy as np
 import pandas as pd
 import rasterio
 import rioxarray
 import xarray as xr
 from tqdm import tqdm
-
-import joblib
-import contextlib
 
 
 def expand_grid(dict_vars):
@@ -313,3 +313,24 @@ def tqdm_joblib(tqdm_object):
     finally:
         joblib.parallel.BatchCompletionCallBack = old_batch_callback
         tqdm_object.close()
+
+
+def grouper(iterable, n, *, incomplete="fill", fillvalue=None):
+    """Collect data into non-overlapping fixed-length chunks or blocks.
+
+    Just from the itertools formulas:
+    # grouper('ABCDEFG', 3, fillvalue='x') → ABC DEF Gxx
+    # grouper('ABCDEFG', 3, incomplete='strict') → ABC DEF ValueError
+    # grouper('ABCDEFG', 3, incomplete='ignore') → ABC DEF
+    """
+
+    iterators = [iter(iterable)] * n
+    match incomplete:
+        case "fill":
+            return zip_longest(*iterators, fillvalue=fillvalue)
+        case "strict":
+            return zip(*iterators, strict=True)
+        case "ignore":
+            return zip(*iterators)
+        case _:
+            raise ValueError("Expected fill, strict, or ignore")
