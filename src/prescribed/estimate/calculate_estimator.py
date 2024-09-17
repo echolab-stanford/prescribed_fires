@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
-
 from tqdm import tqdm
 
 log = logging.getLogger(__name__)
