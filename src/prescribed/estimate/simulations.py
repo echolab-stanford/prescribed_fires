@@ -1,9 +1,10 @@
+import os
+import geopandas as gpd
 import numpy as np
 import pandas as pd
-import geopandas as gpd
+import xarray as xr
+from prescribed.utils import expand_grid, grouper, prepare_template
 from tqdm import tqdm
-from prescribed.utils import prepare_template
-from prescribed.utils import expand_grid
 
 
 def simulation_data(
@@ -170,7 +171,7 @@ def sample_rx_years(
     template["weight"] = 100
     template.loc[
         (~template.Event_ID.isna()) & (template.year == 2010), "weight"
-    ] = 0.1
+    ] = 0
 
     # Sample the data by year without replacement across years
     sampled_years = []
@@ -183,7 +184,15 @@ def sample_rx_years(
     ):
         # Clean df and remove all the grids that were sampled before
         df = df[~df.grid_id.isin(sample_grids)]
-        sample = df.sample(n=sample_n, weights="weight")
+        sample = df.sample(
+            n=sample_n,
+            axis=0,
+            # weights="weight",
+            replace=False,
+        )
+
+        # Assert that old grid_id in sample_grids are not in the new sample
+        assert len(set(sample_grids).intersection(set(df.grid_id))) == 0
 
         # Not the same grids on each year
         sample_grids.extend(sample.grid_id.unique())
@@ -205,7 +214,6 @@ def sample_rx_years(
         sample["year_treat"] = g_idx
 
         # Randomily pick within the CIs
-        # sample["coeff"] = np.random.uniform(sample.low_ci, sample.high_ci)
         sample["coeff"] = np.random.normal(loc=sample.coef, scale=sample.se)
 
         if size_treatment > 1000:
@@ -220,3 +228,94 @@ def sample_rx_years(
     sampled_years = pd.concat(sampled_years)
 
     return sampled_years
+
+
+def run_simulations(
+    template: str | pd.DataFrame,
+    sim_data: str | pd.DataFrame,
+    results: str | pd.DataFrame,
+    fire_data: str | pd.DataFrame,
+    save_path: str,
+    num_sims: int = 100,
+    step_save: int = 10,
+    dims: list = ["lat", "lon", "year", "year_treat"],
+    **kwargs,
+) -> None:
+    """Execute experiment simulations!
+
+    This function is just a loop-wrapper around the sample_rx_years function to
+    run all the simulations several times and store the simulated every number
+    of steps. The saving pattern can be set by changing the step_save parameter
+    that will define the number of simulations per file and num_sims will define]
+    the global number of simulations per experiment.
+
+    Thus, if we run 100 simulations with a `step_save = 10`, then we will get
+    `100/10 = 10` files with 10 simulations each.
+
+    Parameters
+    ----------
+    template : str
+        The path to the template data
+    sim_data : str
+        The path to the simulation data
+    results : str
+        The path to the results data
+    fire_data : str
+        The path to the fire data
+    save_path : str
+        The path to save the simulations
+    num_sims : int
+        The number of simulations to run
+    step_save : int
+        The number of simulations to save
+    dims : list
+        The dimensions to use for the simulations
+
+    Returns
+    -------
+        None.
+    """
+
+    # Make sure save path exists
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=True)
+
+    # Supress warnings
+    import warnings
+
+    warnings.filterwarnings("ignore")
+
+    # Run all the simulations and save for each group
+    for group_sims in tqdm(
+        grouper(range(1, num_sims), step_save),
+        total=int(num_sims / step_save),
+        desc="Grouping simulations",
+    ):
+        arr_lst = []
+        for idx in group_sims:
+            sample_rx = sample_rx_years(
+                template=template,
+                treat_data=sim_data,
+                estimates=results,
+                fire_data=fire_data,
+                **kwargs,
+            )
+
+            test_arr = sample_rx.copy()
+            test_arr = test_arr.merge(
+                template, on=["lat", "lon", "year", "grid_id"], how="right"
+            )
+            test_arr["coeff"] = test_arr["coeff"].fillna(0)
+
+            # Set the index (remove year treat)
+            test_arr = test_arr.set_index(dims)[["coeff"]].to_xarray()
+
+            # Add dimension to the array
+            test_arr = test_arr.expand_dims({"sim": [idx]})
+            arr_lst.append(test_arr)
+
+        # Concatenate all the arrays
+        filename = os.path.join(
+            save_path, f"sim_{group_sims[0]}_{group_sims[-1]}.nc4"
+        )
+        test_arr = xr.concat(arr_lst, dim="sim").to_netcdf(filename)
