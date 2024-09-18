@@ -1,4 +1,5 @@
 import os
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -151,11 +152,6 @@ def sample_rx_years(
     # Load RR results from SC
     if isinstance(estimates, str):
         estimates = pd.read_csv(estimates)
-    else:
-        estimates = estimates.copy(deep=True)
-
-    # Change lags to years!
-    estimates["year"] = start_year + estimates.year
 
     # Subset for the years we are interested in the treatment data
     fire_data = fire_data[fire_data.year >= start_year]
@@ -171,7 +167,7 @@ def sample_rx_years(
     template["weight"] = 100
     template.loc[
         (~template.Event_ID.isna()) & (template.year == 2010), "weight"
-    ] = 0
+    ] = 0.01
 
     # Sample the data by year without replacement across years
     sampled_years = []
@@ -187,7 +183,7 @@ def sample_rx_years(
         sample = df.sample(
             n=sample_n,
             axis=0,
-            # weights="weight",
+            weights="weight",
             replace=False,
         )
 
@@ -209,8 +205,15 @@ def sample_rx_years(
             how="left",
         )
 
+        # Change lags to years! (we want to translate from the lags to the
+        # years)
+        estimates_year = estimates.copy(deep=True)
+        estimates_year["year"] = g_idx + estimates_year.year
+
         # Add coeffs and the high and low CIs so we can sample values later!
-        sample = sample.merge(estimates, on=["land_type", "year"], how="left")
+        sample = sample.merge(
+            estimates_year, on=["land_type", "year"], how="left"
+        )
         sample["year_treat"] = g_idx
 
         # Randomily pick within the CIs
@@ -227,6 +230,9 @@ def sample_rx_years(
 
     sampled_years = pd.concat(sampled_years)
 
+    # Make sampled years a dataframe
+    sampled_years.drop(columns=["geometry"], errors="ignore", inplace=True)
+
     return sampled_years
 
 
@@ -239,6 +245,7 @@ def run_simulations(
     num_sims: int = 100,
     step_save: int = 10,
     dims: list = ["lat", "lon", "year", "year_treat"],
+    format: str = "netcdf",
     **kwargs,
 ) -> None:
     """Execute experiment simulations!
@@ -307,15 +314,37 @@ def run_simulations(
             )
             test_arr["coeff"] = test_arr["coeff"].fillna(0)
 
-            # Set the index (remove year treat)
-            test_arr = test_arr.set_index(dims)[["coeff"]].to_xarray()
+            if format == "netcdf":
+                test_arr = test_arr.set_index(dims)[["coeff"]].to_xarray()
 
-            # Add dimension to the array
-            test_arr = test_arr.expand_dims({"sim": [idx]})
-            arr_lst.append(test_arr)
+                # Add dimension to the array
+                test_arr = test_arr.expand_dims({"sim": [idx]})
+                arr_lst.append(test_arr)
 
-        # Concatenate all the arrays
-        filename = os.path.join(
-            save_path, f"sim_{group_sims[0]}_{group_sims[-1]}.nc4"
-        )
-        test_arr = xr.concat(arr_lst, dim="sim").to_netcdf(filename)
+            elif format == "parquet":
+                test_arr["sim"] = idx
+                arr_lst.append(test_arr)
+
+        if format == "netcdf":
+            # Concatenate all the arrays
+            filename = os.path.join(
+                save_path, f"sim_{group_sims[0]}_{group_sims[-1]}.parquet"
+            )
+            test_arr = xr.concat(arr_lst, dim="sim").to_netcdf(filename)
+
+        elif format == "parquet":
+            filename = os.path.join(
+                save_path, f"sim_{group_sims[0]}_{group_sims[-1]}.parquet"
+            )
+            test_arr = pd.concat(arr_lst)
+
+            # Select only the columns we care about
+            test_arr = test_arr[dims + ["grid_id", "land_type", "coeff", "sim"]]
+
+            test_arr.to_parquet(filename)
+        else:
+            ValueError(
+                f"Format {format} not supported. Only netcdf and parquet"
+            )
+
+    return None
