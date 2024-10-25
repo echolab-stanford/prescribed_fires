@@ -365,16 +365,18 @@ def calculate_spillover_estimator(
     focal_years: list,
     distance: int,
     pooling: bool = False,
+    estimator: str = "rr",
+    dep_var: str = "fire",
     **kwargs,
 ) -> pd.DataFrame:
     """Calculate the spillover estimator for a given set of treatments and weights.
 
-    Just as the `calculate_estimator` function, we want to calculate the ATT for
+    Just as the `calculate_estimator` function, we want to calculate the RR for
     a given focal year and lagged years. The difference here is that we are using
     a different treatment definition: the distance to the treatment. This changes
     also how we create these treatments and use a long dataframe rather than the
     wide one we used in the `calculate_estimator` function. The output is the
-    relative risk estimator as the ATT.
+    relative risk estimator as the RR.
 
     Parameters
     ----------
@@ -393,6 +395,13 @@ def calculate_spillover_estimator(
         The distance to the treatment to calculate the estimator
     pooling : Optional[bool]
         If we want to pool the estimators across lags. Default is False
+    estimator : str
+        The estimator to calculate. We can either use the weights to calculate
+        the ATT or the RR (relative risk). Default is "rr"
+    dep_var : str
+        The name of the dependent variable in the `fire_data` dataframe. This is
+        used to either calculate the RR as the number of fires in the treatment
+        and control, or can be any variable to calculate the means for the ATTs.
     **kwargs
         Additional arguments to pass to the `pooling_estimates` function
 
@@ -401,6 +410,17 @@ def calculate_spillover_estimator(
     pd.DataFrame
         A dataframe with the estimator for each of the lagged years
     """
+
+    if estimator not in ["att", "rr"]:
+        raise ValueError(
+            "Invalid estimator. Available options are 'att' or 'rr'"
+        )
+
+    if estimator == "att":
+        op = "mean"
+    else:
+        op = "sum"
+
     list_estimates = []
     for focal_year in tqdm(
         focal_years, desc="Calculate estimate for focal year"
@@ -414,13 +434,13 @@ def calculate_spillover_estimator(
             & (fire_data.year > focal_year)
         ]
 
-        # Calculate fire counts in treatments along time
-        fire_treat_counts = fire_data_treats.groupby(
-            "year", as_index=False
-        ).fire.count()
+        # Calculate fire aggregation in treatments along time
+        fire_treat_counts = fire_data_treats.groupby("year", as_index=False)[
+            dep_var
+        ].agg(op)
 
         # Rename grouped var to something more meaningful
-        fire_treat_counts.rename(columns={"fire": "treat_mean"}, inplace=True)
+        fire_treat_counts.rename(columns={dep_var: "treat_mean"}, inplace=True)
 
         # Now do it for the SCs using the weights to do the count
         weights_year = weights[weights.focal_year == focal_year].drop(
@@ -428,21 +448,36 @@ def calculate_spillover_estimator(
         )
         fire_data_controls = fire_data.merge(weights_year, on="grid_id")
 
-        # Calculate fire counts in controls as a weighted sum
-        fire_control_counts = fire_data_controls.groupby(
-            "year", as_index=False
-        ).weights.sum()
+        if estimator == "rr":
+            # Calculate fire counts in controls as a weighted sum
+            fire_control_counts = fire_data_controls.groupby(
+                "year", as_index=False
+            ).weights.sum()
 
-        # Rename grouped var to something more meaningful
-        fire_control_counts.rename(
-            columns={"weights": "control_mean"}, inplace=True
-        )
+            # Rename grouped var to something more meaningful
+            fire_control_counts.rename(
+                columns={"weights": "control_mean"}, inplace=True
+            )
 
-        # Calculate the estimator and add some additional columns
-        est_df = fire_treat_counts.merge(fire_control_counts, on="year")
-        est_df["att"] = est_df["treat_mean"] / est_df["control_mean"]
-        est_df["focal_year"] = focal_year
-        est_df["lag"] = est_df["year"] - focal_year
+            # Calculate the estimator and add some additional columns
+            est_df = fire_treat_counts.merge(fire_control_counts, on="year")
+            est_df["att"] = est_df["treat_mean"] / est_df["control_mean"]
+            est_df["focal_year"] = focal_year
+            est_df["lag"] = est_df["year"] - focal_year
+
+        else:
+            # Calculate fire counts in controls as a weighted mean
+            fire_control_counts = fire_data_controls.groupby(
+                "year", as_index=False
+            ).apply(lambda df: np.average(df[dep_var], weights=df["weights"]))
+
+            fire_control_counts.columns = ["year", "control_mean"]
+
+            # Calculate the estimator and add some additional columns
+            est_df = fire_treat_counts.merge(fire_control_counts, on="year")
+            est_df["att"] = est_df["treat_mean"] - est_df["control_mean"]
+            est_df["focal_year"] = focal_year
+            est_df["lag"] = est_df["year"] - focal_year
 
         list_estimates.append(est_df)
 
