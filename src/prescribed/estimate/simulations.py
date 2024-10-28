@@ -1,4 +1,5 @@
 import os
+import pdb
 
 import geopandas as gpd
 import numpy as np
@@ -94,6 +95,9 @@ def sample_rx_years(
     fire_data: pd.DataFrame,
     estimates: pd.DataFrame | str,
     size_treatment: int | None,
+    spillovers: bool = False,
+    spillover_size: int | None = 1_000,
+    spillover_estimates: pd.DataFrame | None = None,
     start_year: int = 2010,
     sample_n: int = 100,
     crs: str = "EPSG:3310",
@@ -149,14 +153,14 @@ def sample_rx_years(
             columns=["spatial_ref"], errors="ignore"
         )
 
-    # Load RR results from SC
+    # Load ATT results from SC
     if isinstance(estimates, str):
         estimates = pd.read_csv(estimates)
 
     # Subset for the years we are interested in the treatment data
     fire_data = fire_data[fire_data.year >= start_year]
 
-    # Merge treats with the template so we get full years
+    # Merge treats with the template so we can loop over years!
     template = template.merge(
         treat_data.drop(columns=["lat", "lon"], errors="ignore"), on="grid_id"
     )
@@ -164,10 +168,17 @@ def sample_rx_years(
 
     # Create weight for sampling. We want to downweight to sample units w/
     # fires in that year
-    template["weight"] = 100
-    template.loc[
-        (~template.Event_ID.isna()) & (template.year == 2010), "weight"
-    ] = 0.01
+    template = template[template.Event_ID.isin([np.nan, "nodata"])]
+
+    # If spillovers, we need to buffer the points and get all the pixels that
+    # are within that buffer
+    if spillovers:
+        if not isinstance(template, gpd.GeoDataFrame):
+            template = gpd.GeoDataFrame(
+                template,
+                geometry=gpd.points_from_xy(template.lon, template.lat),
+            )
+            template.crs = crs
 
     # Sample the data by year without replacement across years
     sampled_years = []
@@ -183,11 +194,76 @@ def sample_rx_years(
         sample = df.sample(
             n=sample_n,
             axis=0,
-            weights="weight",
             replace=False,
         )
 
+        # If spillovers, add them to the sample using a buffer around each of
+        # the sampled points
+        if spillovers:
+            spill = sample.copy()
+            spill["geometry"] = spill.buffer(spillover_size, cap_style="square")
+            spill = (
+                template[template.year == g_idx]
+                .drop(
+                    columns=[
+                        "lat",
+                        "lon",
+                        "year",
+                        "Ig_Date",
+                        "Event_ID",
+                        "Incid_Type",
+                        "Incid_Name",
+                        "land_type",
+                    ],
+                    errors="ignore",
+                )
+                .overlay(spill.drop(columns=["grid_id"]), how="intersection")
+            )
+            spill = spill.drop_duplicates(subset=["grid_id"])
+
+            # Remove initial sample from the spill data
+            spill = spill[~spill.grid_id.isin(sample.grid_id)]
+
+            # Create sample grid to track spillovers (we are going to just focus
+            # on the spillovers for now, and later add the initial treatment
+            # sample later)
+            spill_grid = expand_grid(
+                {
+                    "grid_id": spill.grid_id.unique(),
+                    "year": range(g_idx + 1, 2023),
+                }
+            )
+
+            # Add location and other stuff back
+            spill_grid = spill_grid.merge(
+                spill[["grid_id", "lat", "lon"]],
+                on="grid_id",
+                how="left",
+            )
+            spill_grid["land_type"] = "spillover"
+
+            # Add estimates!
+            spillover_estimates_year = spillover_estimates.copy(deep=True)
+            spillover_estimates_year["year"] = (
+                g_idx + spillover_estimates_year.year
+            )
+            spill_grid = spill_grid.merge(
+                spillover_estimates_year, on=["year"], how="left"
+            )
+
+            # Add the treatment year
+            spill_grid["year_treat"] = g_idx
+
+            # Randomily pick within the CIs -- assuming normality
+            spill_grid["coeff"] = np.random.normal(
+                loc=spill_grid.coef, scale=spill_grid.se
+            )
+
         # Assert that old grid_id in sample_grids are not in the new sample
+        # Notice here than if the spillovers are added, then we are only
+        # checking for treatments, so is possible that this assertion is not
+        # true when the spillovers are added. Now, a spillover pixel is not the
+        # same as a treatment pixel, so we leave this assertion untouched.
         assert len(set(sample_grids).intersection(set(df.grid_id))) == 0
 
         # Not the same grids on each year
@@ -219,12 +295,18 @@ def sample_rx_years(
         # Randomily pick within the CIs
         sample["coeff"] = np.random.normal(loc=sample.coef, scale=sample.se)
 
+        # Increase the size of treatment here. We are not developing this much
+        # as usually these treatments are sub 1-square km. But we can increase
+        # the size of the treatment to see how the spillovers behave [WIP]
         if size_treatment > 1000:
             sample["geometry"] = sample.buffer(
                 size_treatment, cap_style="square"
             )
             sample = sample.overlay(df, how="intersects")
             sample = sample.drop_duplicates(subset=["grid_id"])
+
+        if spillovers:
+            sample = pd.concat([sample, spill_grid])
 
         sampled_years.append(sample)
 
