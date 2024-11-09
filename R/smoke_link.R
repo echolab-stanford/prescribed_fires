@@ -16,6 +16,7 @@ p_load(
     tigris,
     lubridate,
     arrow,
+    duckdb,
     ggplot2,
     estimatr,
     modelsummary,
@@ -223,8 +224,6 @@ data_list_tresh <- lapply(events_by_tresh, function(events) {
 ################################################################################
 ##################### AGGREGATE LINKED SMOKE PM BY EVENT_ID/ID #################
 ################################################################################
-
-
 
 # Aggregate data.table by ID
 data_agg <- data_list_tresh[, .(
@@ -520,14 +519,14 @@ run_reg <- function(
     # Build formula using controls and dv
     if (isTRUE(fe)) {
         formula <- paste0(
-            y, " ~ ", glue::glue("poly({x}, {order})"), "+",
+            y, " ~ ", glue::glue("poly({x}, {order}, raw=TRUE)"), "+",
             paste0(controls, collapse = " + "), "  | year "
         )
         mod <- fixest::feols(as.formula(formula), data = train_data)
         r2 <- r2(mod, "war2")
     } else {
         formula <- paste0(
-            y, " ~ ", glue::glue("poly({x}, {order})"), "+",
+            y, " ~ ", glue::glue("poly({x}, {order}, raw=TRUE)"), "+",
             paste0(controls, collapse = " + ")
         )
         mod <- lm(as.formula(formula), data = train_data)
@@ -571,7 +570,7 @@ run_reg <- function(
 
 # Build grid to search for best model
 grid <- expand.grid(
-    deg_ord = 1:5,
+    deg_ord = 1:4,
     thresh = seq(0.5, 0.9, 0.1)
 )
 
@@ -579,7 +578,7 @@ grid <- expand.grid(
 grid_out <- pbmclapply(seq_along(1:nrow(grid)), function(i) {
     # Loop data
     data <- severity_agg %>%
-        dplyr::filter(coverage_threshold > grid$thresh[i])
+        dplyr::filter(coverage_threshold == grid$thresh[i])
 
     if (nrow(data) == 0) {
         return(NULL)
@@ -590,8 +589,8 @@ grid_out <- pbmclapply(seq_along(1:nrow(grid)), function(i) {
             controls = c("total_days", "total_pixels"),
             order = grid$deg_ord[i],
             data = data,
-            fe = FALSE,
-            split_train = 0.7,
+            fe = TRUE,
+            split_train = 0.8,
             remove_outliers = TRUE
         )
 
