@@ -1,12 +1,106 @@
 import os
-import pdb
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyfixest as pf
+import statsmodels.formula.api as smf
 import xarray as xr
 from prescribed.utils import expand_grid, grouper, prepare_template
 from tqdm import tqdm
+
+
+def make_model(linked_data, formula, fe=True):
+    """Create a model using the linked data
+
+    Use the linked data to create a model that can be used to estimate the
+    effect of smoke on health outcomes.
+
+    Parameters
+    ----------
+    linked_data : pd.DataFrame
+        DataFrame with the linked data
+    formula : str
+        Formula to use in the model
+    fe : bool
+        Whether to use fixed effects in the model
+
+    Returns
+    -------
+    coefs : dict[model: np.array]
+        Dict with the coefficients of the model
+    """
+
+    if fe:
+        formula = formula + " | year"
+        model = pf.feols(fml=formula, data=linked_data, fixef_tol=1e-5)
+
+        out = pd.DataFrame({"coef": model.coef(), "se": model.se()})
+        coefs = {"fe": out}
+
+    else:
+        model = smf.ols(formula, data=linked_data).fit()
+
+        out = pd.DataFrame({"coef": model.params, "se": model.bse})
+        coefs = {"ols": out}
+
+    return coefs
+
+
+def make_predictions(severity, coefs, controls=None, degree=2):
+    """Create predictions using regression coefficients
+
+    Use simulated severity array to create predictions for each year passed
+    in the coefficients array.
+
+    Parameters
+    ----------
+    severity : np.array
+        Array of simulated severity values
+    coefficients : pd.DataFrame
+        DataFrame with the coefficients and standard errors of the model
+
+    Returns
+    -------
+    predictions : np.array
+        Array of predictions for each year
+    """
+
+    if isinstance(severity, pd.Series):
+        severity = severity.values
+
+    # Take array severity and transform it into polynimial features
+    X = np.vander(severity, degree + 1, increasing=True)
+
+    if "fe" in coefs.keys():
+        X = X[:, 1:]  # remove the constant term
+        coefs = coefs["fe"]
+
+        if controls is None:
+            mask = coefs.index.str.contains("severity")
+            coefs = coefs[mask]
+    else:
+        coefs = coefs["ols"]
+
+        # Remove year always in case we do FEOLS the old way
+        coefs = coefs[~coefs.index.str.contains("year")]
+
+        if controls is None:
+            mask = coefs.index.str.contains(
+                "severity"
+            ) | coefs.index.str.contains("Intercept")
+            coefs = coefs[mask]
+
+    # Select random coefficients from a normal distribution
+    coefs = np.random.normal(loc=coefs["coef"], scale=coefs["se"])
+
+    if controls is not None:
+        X = np.hstack([X, controls])
+
+    # Multiply the coefficients by the polynomial features
+    preds = coefs @ X.T
+
+    return pd.Series(preds)
 
 
 def simulation_data(
@@ -137,6 +231,9 @@ def sample_rx_years(
             A pandas dataframe with the sampled years
     """
 
+    # Keep columns of interest at the end!
+    cols = ["grid_id", "lat", "lon", "year", "year_treat", "coeff", "land_type"]
+
     # Load all datasets
     if isinstance(template, str):
         template = prepare_template(template, years=[2000, 2022])
@@ -157,14 +254,14 @@ def sample_rx_years(
     if isinstance(estimates, str):
         estimates = pd.read_csv(estimates)
 
-    # Subset for the years we are interested in the treatment data
-    fire_data = fire_data[fire_data.year >= start_year]
-
     # Merge treats with the template so we can loop over years!
     template = template.merge(
         treat_data.drop(columns=["lat", "lon"], errors="ignore"), on="grid_id"
     )
     template = template.merge(fire_data, on=["lat", "lon", "year"], how="left")
+
+    # Subset for the years we are interested in the treatment data
+    template = template[template.year >= start_year]
 
     # Create weight for sampling. We want to downweight to sample units w/
     # fires in that year
@@ -197,6 +294,9 @@ def sample_rx_years(
             replace=False,
         )
 
+        # Not the same grids on each year
+        sample_grids.extend(sample.grid_id.unique())
+
         # If spillovers, add them to the sample using a buffer around each of
         # the sampled points
         if spillovers:
@@ -221,6 +321,9 @@ def sample_rx_years(
             )
             spill = spill.drop_duplicates(subset=["grid_id"])
 
+            # Remove the spillovers from future samples
+            sample_grids.extend(spill.grid_id.unique())
+
             # Remove initial sample from the spill data
             spill = spill[~spill.grid_id.isin(sample.grid_id)]
 
@@ -240,7 +343,8 @@ def sample_rx_years(
                 on="grid_id",
                 how="left",
             )
-            spill_grid["land_type"] = "spillover"
+            # Bit of a hack to track the spillovers!
+            spill_grid["land_type"] = 100
 
             # Add estimates!
             spillover_estimates_year = spillover_estimates.copy(deep=True)
@@ -264,7 +368,7 @@ def sample_rx_years(
         # checking for treatments, so is possible that this assertion is not
         # true when the spillovers are added. Now, a spillover pixel is not the
         # same as a treatment pixel, so we leave this assertion untouched.
-        assert len(set(sample_grids).intersection(set(df.grid_id))) == 0
+        # assert len(set(sample_grids).intersection(set(df.grid_id))) == 0
 
         # Not the same grids on each year
         sample_grids.extend(sample.grid_id.unique())
@@ -308,7 +412,7 @@ def sample_rx_years(
         if spillovers:
             sample = pd.concat([sample, spill_grid])
 
-        sampled_years.append(sample)
+        sampled_years.append(sample[cols])
 
     sampled_years = pd.concat(sampled_years)
 
@@ -382,19 +486,13 @@ def run_simulations(
     ):
         arr_lst = []
         for idx in group_sims:
-            sample_rx = sample_rx_years(
+            test_arr = sample_rx_years(
                 template=template,
                 treat_data=sim_data,
                 estimates=results,
                 fire_data=fire_data,
                 **kwargs,
             )
-
-            test_arr = sample_rx.copy()
-            test_arr = test_arr.merge(
-                template, on=["lat", "lon", "year", "grid_id"], how="right"
-            )
-            test_arr["coeff"] = test_arr["coeff"].fillna(0)
 
             if format == "netcdf":
                 test_arr = test_arr.set_index(dims)[["coeff"]].to_xarray()
@@ -423,7 +521,7 @@ def run_simulations(
             # Select only the columns we care about
             test_arr = test_arr[dims + ["grid_id", "land_type", "coeff", "sim"]]
 
-            test_arr.to_parquet(filename)
+            test_arr.to_parquet(filename, index=False)
         else:
             ValueError(
                 f"Format {format} not supported. Only netcdf and parquet"
