@@ -298,9 +298,8 @@ frp <- arrow::read_feather(
     inner_join(data_agg, by = c("Event_ID")) %>%
     inner_join(land_type_event, by = "Event_ID")
 
-# Load severity data in feather format
 severity <- arrow::read_feather(
-    paste0(data_proc, "/dnbr_gee_inmediate/dnbr_long.feather")
+    paste0(data_proc, "/dnbr_gee/dnbr_long.feather")
 ) %>%
     mutate(rx = ifelse(event_id %in% rx_fires_id, 1, 0)) %>%
     left_join(
@@ -310,6 +309,10 @@ severity <- arrow::read_feather(
     ) %>%
     inner_join(mtbs_df %>% select(Event_ID, year) %>% st_drop_geometry(),
         by = c("event_id" = "Event_ID")
+    ) %>%
+    right_join(
+        treatments,
+        by = c("lat", "lon", "year")
     )
 
 
@@ -337,6 +340,8 @@ severity_agg <- severity %>%
         sum_contrib_km = sum_contrib / total_pixels,
         sum_severity_km = sum_severity / total_pixels,
     )
+
+
 # Get only in-sample severity
 severity_sample <- severity %>%
     filter(event_id %in%
@@ -627,6 +632,7 @@ calculate_marginal_effects <- function(mod) {
     )
 }
 
+# Create plot
 
 grid_preds <- grid_out %>%
     mutate(preds = map2(data, mod, create_predict_dataset)) %>%
