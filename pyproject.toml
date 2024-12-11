@@ -24,3 +24,7 @@ extend-select = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 max-doc-length = 80
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 20
