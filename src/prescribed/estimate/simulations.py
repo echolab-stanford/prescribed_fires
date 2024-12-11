@@ -1,16 +1,27 @@
 import os
+import warnings
 
+import duckdb
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyfixest as pf
 import statsmodels.formula.api as smf
 import xarray as xr
+from joblib import Parallel, delayed
 from prescribed.utils import expand_grid, grouper, prepare_template
 from tqdm import tqdm
 
 
-def make_model(linked_data, formula, fe=True):
+def make_model(
+    linked_data: pd.DataFrame,
+    formula: str,
+    bootstrap: bool = False,
+    k: int = 999,
+    mask="sum_severity",
+    predict=False,
+    new_data=None,
+):
     """Create a model using the linked data
 
     Use the linked data to create a model that can be used to estimate the
@@ -22,32 +33,100 @@ def make_model(linked_data, formula, fe=True):
         DataFrame with the linked data
     formula : str
         Formula to use in the model
-    fe : bool
-        Whether to use fixed effects in the model
+    bootstrap : bool, optional
+        Whether to perform bootstrapping, by default False
+    k : int, optional
+        Number of bootstrap samples, by default 999
+    mask : str, optional
+        Mask to filter coefficients, by default "sum_severity"
 
     Returns
     -------
-    coefs : dict[model: np.array]
-        Dict with the coefficients of the model
+    model: pyfixest.OLS or np.array
     """
+    fes = None
 
-    if fe:
-        formula = formula + " | year"
-        model = pf.feols(fml=formula, data=linked_data, fixef_tol=1e-5)
+    if len(formula.split("|")) > 1:
+        fes = formula.split("|")[1].strip()
 
-        out = pd.DataFrame({"coef": model.coef(), "se": model.se()})
-        coefs = {"fe": out}
+    # Function to perform bootstrapping for a single iteration
+    def bootstrap_iteration(
+        i,
+        linked_data,
+        formula,
+        fes=None,
+        mask=None,
+        predict=False,
+        new_data=None,
+    ):
+        sample = linked_data.sample(frac=1, replace=True)
+        try:
+            if fes is not None:
+                model = pf.feols(
+                    fml=formula,
+                    data=sample,
+                    fixef_tol=1e-3,
+                    vcov={"CRV1": fes},
+                )
+            else:
+                model = smf.ols(formula, data=sample).fit()
+
+            if predict:
+                # yeah, it says coefs, but they're predictions
+                coefs_ = model.predict(newdata=new_data)
+            else:
+                # Extract the coefficients and transform to an array
+                coefs_ = model.coef()
+                coefs_ = coefs_[coefs_.index.str.contains(mask)].values
+
+            return coefs_
+        except Exception as e:
+            print(e)
+            return None
+
+    # If predict, do bootstrap sample
+    if bootstrap:
+        # Run the bootstrapping process in parallel
+        results = list(
+            tqdm(
+                Parallel(n_jobs=-1, return_as="generator")(
+                    delayed(bootstrap_iteration)(
+                        i, linked_data, formula, fes, mask, predict, new_data
+                    )
+                    for i in range(k)
+                ),
+                total=k,
+                desc="Bootstrapping model results/coefficients",
+            )
+        )
+        # Filter out None results and update coef_arr
+        valid_results = [res for res in results if res is not None]
+
+        if predict:
+            coef_arr = np.array(valid_results)
+        else:
+            coef_arr = np.zeros((len(valid_results), 2))
+            coef_arr[: len(valid_results), :] = np.array(valid_results)
+
+        return coef_arr
 
     else:
-        model = smf.ols(formula, data=linked_data).fit()
+        if fes is not None:
+            model = pf.feols(
+                fml=formula,
+                data=linked_data,
+                fixef_tol=1e-5,
+                vcov={"CRV1": fes},
+            )
+        else:
+            model = smf.ols(formula, data=linked_data).fit()
 
-        out = pd.DataFrame({"coef": model.params, "se": model.bse})
-        coefs = {"ols": out}
-
-    return coefs
+        return model
 
 
-def make_predictions(severity, coefs, controls=None, degree=2):
+def make_predictions_bootstrap(
+    severity_df, name_var, out_var, coefs, return_pandas=True
+):
     """Create predictions using regression coefficients
 
     Use simulated severity array to create predictions for each year passed
@@ -66,41 +145,391 @@ def make_predictions(severity, coefs, controls=None, degree=2):
         Array of predictions for each year
     """
 
-    if isinstance(severity, pd.Series):
-        severity = severity.values
+    if not {"sim", "event_id", "year_treat", name_var}.issubset(
+        severity_df.columns
+    ):
+        raise KeyError(
+            f"Dataframe must have columns {name_var} and sim. Cannot run bootstrap"
+        )
 
-    # Take array severity and transform it into polynimial features
-    X = np.vander(severity, degree + 1, increasing=True)
+    # Pivot data to be wide (i -> events, j -> simulation_index)
+    # Pivot dataframe to have sim as coluns and sum_dnbr as values
+    severity_array = severity_df.pivot(
+        index=["event_id", "year_treat"],
+        columns="sim",
+        values=name_var,
+    )
 
-    if "fe" in coefs.keys():
-        X = X[:, 1:]  # remove the constant term
-        coefs = coefs["fe"]
+    # Store index for later and transform to numpy array
+    index = severity_array.index
+    severity_array = severity_array.to_numpy()
 
-        if controls is None:
-            mask = coefs.index.str.contains("severity")
-            coefs = coefs[mask]
+    # To do: for now the quadratic transformation is not implemented and we're
+    # just hardcoding stuff and make it work assuming we always have a quadratic
+    # transformation. np.vander doesn't play well with > 1-D arrays.
+    severity_squared = severity_array**2
+
+    # Now this guy is (n_events, 2,  n_sims)
+    severity_stacked = np.stack([severity_array, severity_squared], axis=1)
+
+    # Do the dot product
+    preds = np.einsum("ijk,jk->ik", severity_stacked, coefs.T)
+
+    if return_pandas:
+        preds = pd.DataFrame(
+            preds, index=index, columns=severity_df.sim.unique()
+        )
+
+        # df.stack would be a faster way to achieve this, but the resulting
+        # names are rather cryptic, so melt has more control over that. Haven't
+        # test if this is good if df is massive.
+        preds = pd.melt(
+            preds.reset_index(),
+            var_name="sim",
+            value_name=out_var,
+            id_vars=["event_id", "year_treat"],
+        )
+
+    return preds
+
+
+def calculate_benefits(
+    discount_rates,
+    treat_severity,
+    coefs,
+    path=None,
+    n_treats=None,
+    average_treats=False,
+    **kwargs,
+):
+    """ " Calculate benefits from a specific size policy under different discount rates
+
+    This function will calcualte the total benefit of a prescribed policy using
+    different parameters, including the size of the treatment, the relationship
+    between the emissions and the severity and the discount rate.
+    """
+
+    # Get the simulation data merged with the observed dnbr. This dnbr data is
+    # expected to be identical to the data we have used throughout the analysis
+    # We calculate 3 tables:
+    # 1. `dnbr_data` with the data severity data for each pixel, fire, event in
+    #    the data
+    # 2. `df` with all the simulations, the severity data and the severity
+    #    benefits using the simulated data
+    # 3. `sim_severity` with the severity data for each simulation and by year
+    #    and event. This is the data we use to calculate the benefits of the
+    #    policy
+
+    if path is not None:
+        path_db = os.path.join(path)
     else:
-        coefs = coefs["ols"]
+        path_db = f"../data/policy_no_spill_{n_treats}"
 
-        # Remove year always in case we do FEOLS the old way
-        coefs = coefs[~coefs.index.str.contains("year")]
+    dnbr_data = duckdb.query("""
+    with dnbr_data as (
+    select 
+            grid_id, 
+            year, 
+            Event_ID as event_id, 
+            Incid_Name as event_name, 
+            dnbr 
+    from '../data/dnbr.parquet' 
+    where year > 2010
+    )
+    select event_id, 
+        event_name,      
+        year,
+        sum(dnbr) as sum_dnbr
+    from dnbr_data
+    group by event_id, event_name, year
+    """).to_df()
 
-        if controls is None:
-            mask = coefs.index.str.contains(
-                "severity"
-            ) | coefs.index.str.contains("Intercept")
-            coefs = coefs[mask]
+    df = duckdb.query(f"""
+    WITH simulation_data AS (
+        SELECT *
+        FROM '{path_db}/*.parquet'
+        where sim is not null
+    ), 
+    dnbr_data AS (
+    select 
+            grid_id, 
+            year, 
+            Event_ID as event_id, 
+            Incid_Name as event_name, 
+            dnbr 
+    from '../data/dnbr.parquet' 
+    where year > 2010
+    ), 
+    dnbr_event_agg as (
+    select event_id, 
+        event_name,      
+        year,
+        sum(dnbr) as sum_dnbr
+    from dnbr_data
+    group by event_id, event_name, year
+    ), 
+    benefits_grid_simulation as (
+    SELECT  s.grid_id, 
+            s.year_treat, 
+            s.year, 
+            d.event_id, 
+            d.event_name, 
+            s.sim,
+            s.coeff, 
+            d.dnbr,
+            case when (d.dnbr + s.coeff) < 0 
+                    then 0 
+                    else d.dnbr + s.coeff 
+            end as sim_benefit
+    from simulation_data s 
+    inner join dnbr_data d
+    on s.grid_id = d.grid_id 
+        and s.year = d.year
+    ), 
+    benefits_event_agg as (
+    select event_id,
+        year,
+        year_treat, 
+        event_name,
+        sim,
+        sum(sim_benefit) as sum_benefit_event
+    from benefits_grid_simulation
+    group by event_id, year, event_name, year_treat, sim
+    ),
+    total_event_benefits as (
+    select d.event_id,
+        d.event_name,
+        d.year,
+        d.sum_dnbr,
+        coalesce(b.year_treat, 0) as year_treat,
+        coalesce(b.sim, 0) as sim,
+        coalesce(b.sum_benefit_event, 0) as sum_benefit_event,
+        coalesce(d.sum_dnbr - b.sum_benefit_event, d.sum_dnbr) as simulated_sum_dnbr
+    from benefits_event_agg b
+    INNER JOIN dnbr_event_agg d
+    on b.event_id = d.event_id and b.year = d.year)
+    select * from total_event_benefits
+    """).to_df()
 
-    # Select random coefficients from a normal distribution
-    coefs = np.random.normal(loc=coefs["coef"], scale=coefs["se"])
+    # Results from the query above cotain only the events where treatments and
+    # fire happened. Thus, all MTBS events are not covered here. We want to have
+    # all the events and have the counterfactual and the observed data together
+    # with all the simulation runs. `df_sims` is a dataframe with all the combos
+    df_sims = (
+        df[["year_treat", "sim"]]
+        .drop_duplicates()
+        .sort_values(by=["year_treat", "sim"])
+        .reset_index(drop=True)
+    )
 
-    if controls is not None:
-        X = np.hstack([X, controls])
+    dnbr_data_cross = dnbr_data.merge(df_sims, how="cross")
 
-    # Multiply the coefficients by the polynomial features
-    preds = coefs @ X.T
+    # We need to make sure that we don't have any contamination. This should be
+    # true by design, but the `year_treat` should be always less than the year.
+    dnbr_data_cross = dnbr_data_cross[
+        dnbr_data_cross.year > dnbr_data_cross.year_treat
+    ]
 
-    return pd.Series(preds)
+    # Now bring all the data together!
+    simulation_data = dnbr_data_cross.merge(
+        df[
+            [
+                "event_id",
+                "year",
+                "year_treat",
+                "sim",
+                "simulated_sum_dnbr",
+                "sum_benefit_event",
+            ]
+        ],
+        on=["event_id", "year", "year_treat", "sim"],
+        how="left",
+    )
+
+    # Fill nans with 0: If we don't have simulated dnbr, it means no treatment
+    # so we should keep the same observed dnbr value. Now, if this is the case
+    # it also means there's no benefits, thus they are zero.
+    simulation_data = simulation_data.assign(
+        simulated_sum_dnbr=lambda x: x.simulated_sum_dnbr.fillna(
+            simulation_data.sum_dnbr
+        ),
+        sum_benefit_event=lambda x: x.sum_benefit_event.fillna(0),
+    )
+
+    # Translate severity benefits into emissions using the coefficients
+    emissions = make_predictions_bootstrap(
+        simulation_data,
+        name_var="sum_dnbr",
+        out_var="preds_pm",
+        coefs=coefs,
+        return_pandas=True,
+    )
+
+    simulated_emissions = make_predictions_bootstrap(
+        simulation_data,
+        name_var="simulated_sum_dnbr",
+        out_var="preds_sim_pm",
+        coefs=coefs,
+        return_pandas=True,
+    )
+
+    # Merge both back to simulated data
+    simulation_data = simulation_data.merge(
+        emissions, on=["event_id", "year_treat", "sim"], how="left"
+    )
+
+    simulation_data = simulation_data.merge(
+        simulated_emissions,
+        on=["event_id", "year_treat", "sim"],
+        how="left",
+    )
+
+    # Remove bad predictions than don't make sense in theory. This is another
+    # check, and should always in theory be true, but we are adding it here
+    # just in case.
+    simulation_data = simulation_data[
+        simulation_data.preds_sim_pm <= simulation_data.preds_pm
+    ]
+
+    # Create a warning if the number of rows is different
+    if len(simulation_data) != len(dnbr_data_cross):
+        warnings.warn(
+            "There are some rows that were removed from the simulation data"
+        )
+
+    # Calculate benefits for each simulation
+    simulation_data["benefit"] = (
+        simulation_data["preds_pm"] - simulation_data["preds_sim_pm"]
+    )
+
+    # Calculate the total benefits for each year, sim (aggregate to the State
+    # level)s
+    benefits = simulation_data.groupby(
+        ["year", "year_treat", "sim"], as_index=False
+    )["benefit"].sum()
+
+    # Now calculate the costs of policy emissions! These are the same across all
+    # years and simulations, although they might different given uncertainty in
+    # predictions (here that change with the uncertainty option in the
+    # `make_predictions` function).
+    total_years = benefits.year_treat.unique().shape[0]
+
+    new_data = pd.DataFrame(
+        {
+            "sum_severity": np.repeat(
+                np.array(np.array([treat_severity] * n_treats).sum()),
+                total_years,
+            ),
+            "year": benefits.year_treat.unique(),
+            "total_pixels": np.repeat(np.array([n_treats]), total_years),
+            "total_days": np.repeat(np.array([8]), total_years),
+        }
+    )
+
+    # Get predictions for each sim index and treatment year
+    costs = make_model(
+        new_data=new_data,
+        **kwargs,
+    )
+
+    # Trasnform to a pandas dataframe and merge with the benefits
+    costs_df = pd.DataFrame(costs.T)
+    costs_df.index = new_data.year
+
+    # Rename year to year_treat
+    costs_df = costs_df.reset_index().rename(columns={"year": "year_treat"})
+
+    costs_df = pd.melt(
+        costs_df,
+        var_name="sim",
+        value_name="policy_cost",
+        id_vars="year_treat",
+    )
+
+    benefits = benefits.merge(
+        costs_df,
+        on=["sim", "year_treat"],
+        how="left",
+    )
+
+    # An alternative way to calculate PV benefits is to take the average for each
+    # period of treatment and average on the lagged effect of the treatment.
+    # This means that in lag 1 we have all the first years after the treatment
+    # from year 2010 to 2020, and in lag 2 we have the second years after the
+    # treatment from year 2010 to 2019, and so on. This is a more robust way to
+    # calculate the benefits of the policy.
+    if average_treats:
+        benefits["lag"] = benefits.year - benefits.year_treat
+
+        mean_benefits = benefits.groupby(["lag", "sim"], as_index=False)[
+            ["benefit", "policy_cost"]
+        ].mean()
+
+        pv_list = []
+        for discount_rate in discount_rates:
+            for sim, sim_df in mean_benefits.groupby("sim"):
+                for lag in sim_df.lag.unique():
+                    # Create discount stream for the range of years in the data
+                    years_policy = sim_df[sim_df.lag <= lag].shape[0]
+                    discount_stream = 1 / (1 + discount_rate) ** np.arange(
+                        1, years_policy + 1
+                    )
+
+                    # Calculate the PV benefits
+                    pv = np.sum(
+                        sim_df[sim_df.lag <= lag].benefit.values
+                        @ discount_stream
+                    )
+                    ratio = pv / np.unique(sim_df.policy_cost)[0]
+
+                    pv_list.append(
+                        pd.DataFrame(
+                            {
+                                "lag": [lag],
+                                "sim": [sim],
+                                "pv": [pv],
+                                "ratio": [ratio],
+                                "discount_rate": [discount_rate],
+                            }
+                        )
+                    )
+        # Concatenate all the dataframes with PV/C ratios
+        pv = pd.concat(pv_list)
+
+    else:
+        # Assume individual PV for each policy year.
+        pv_list = []
+        for discount_rate in discount_rates:
+            for idx, df_year in benefits.groupby(["year_treat", "sim"]):
+                year, sim = idx
+
+                # Create discount stream for the range of years in the data
+                years_policy = df_year.year.unique().shape[0]
+                discount_stream = 1 / (1 + discount_rate) ** np.arange(
+                    1, years_policy + 1
+                )
+
+                # Calculate the PV benefits
+                pv = np.sum(df_year.benefit.values @ discount_stream)
+                ratio = pv / np.unique(df_year.policy_cost)[0]
+
+                pv_list.append(
+                    pd.DataFrame(
+                        {
+                            "year_treat": [year],
+                            "sim": [sim],
+                            "pv": [pv],
+                            "ratio": [ratio],
+                            "discount_rate": [discount_rate],
+                        }
+                    )
+                )
+
+        # Concatenate all the dataframes with PV/C ratios
+        pv = pd.concat(pv_list)
+        pv["lag"] = np.abs(pv.year_treat - pv.year_treat.max()) + 1
+
+    return pv, simulation_data
 
 
 def simulation_data(
@@ -293,9 +722,6 @@ def sample_rx_years(
             axis=0,
             replace=False,
         )
-
-        # Not the same grids on each year
-        sample_grids.extend(sample.grid_id.unique())
 
         # If spillovers, add them to the sample using a buffer around each of
         # the sampled points
