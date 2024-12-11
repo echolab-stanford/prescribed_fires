@@ -437,44 +437,79 @@ def plot_outcomes(
     return ax
 
 
-def get_best_poly_fit(X, y, degrees=np.arange(1, 10), min_rmse=1e10, min_deg=0):
-    """Boiler-plate CV for polynomial regression
-
-    Test a polynomial fit for a regression target and return the best degree based on RMSE.
+def get_best_poly_fit(
+    X,
+    y,
+    degrees,
+    poly_col_index="sum_severity",
+    min_rmse=float("inf"),
+    min_deg=1,
+):
+    """
+    Get the best polynomial fit for a given data.
 
     Parameters
     ----------
     X : np.array
-        Features to train with
+        Features array
     y : np.array
-        Target prediction in regression
-    degrees : np.array
+        Target array
+    poly_col_index : int
+        Index of the column in X to apply the polynomial transformation
+    degrees : list
         Degrees to test the polynomial fit
     min_rmse : float
-        Minimum RMSE treshold
+        Minimum RMSE threshold
     min_deg : int
-        Minimum degree treshold
+        Minimum degree threshold
 
     Returns
     -------
     dict
         Dictionary with the degrees, RMSEs and best degree
     """
-    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    # Shuffle and split the data
+    x_train, x_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.3,
+        random_state=42,
+    )
 
     rmses = []
-
     for deg in degrees:
         # Train features
-        poly_features = PolynomialFeatures(degree=deg, include_bias=False)
-        x_poly_train = poly_features.fit_transform(x_train)
+        poly_features = PolynomialFeatures(degree=deg, include_bias=True)
+
+        # Transform only the specified column
+        x_poly_train_col = poly_features.fit_transform(
+            x_train[poly_col_index].values.reshape(-1, 1)
+        )
+
+        # Concatenate the transformed column with the rest of the features
+        x_poly_train = np.concatenate(
+            [
+                x_poly_train_col,
+                x_train,
+            ],
+            axis=1,
+        )
 
         # Linear regression
         poly_reg = LinearRegression()
         poly_reg.fit(x_poly_train, y_train)
 
         # Compare with test data
-        x_poly_test = poly_features.fit_transform(x_test)
+        x_poly_test_col = poly_features.fit_transform(
+            x_test[poly_col_index].values.reshape(-1, 1)
+        )
+        x_poly_test = np.concatenate(
+            [
+                x_poly_test_col,
+                x_test,
+            ],
+            axis=1,
+        )
         poly_predict = poly_reg.predict(x_poly_test)
         poly_mse = mean_squared_error(y_test, poly_predict)
         poly_rmse = np.sqrt(poly_mse)
@@ -485,21 +520,16 @@ def get_best_poly_fit(X, y, degrees=np.arange(1, 10), min_rmse=1e10, min_deg=0):
             min_rmse = poly_rmse
             min_deg = deg
 
-        # Calculate the predicted value with the best polynomial fit for an X of 1.25
-        if deg == min_deg:
-            best_poly_predict = poly_reg.predict(
-                poly_features.fit_transform([[1.25]])
-            )
-
     return {
         "degrees": degrees,
         "rmses": rmses,
         "best_degree": min_deg,
-        "pred": best_poly_predict[0],
     }
 
 
-def run_fit_curve(data, x_col, y_col, by, cmap, ax=None, plot=True, **kwargs):
+def run_fit_curve(
+    data, x_col, y_col, cmap, by=None, ax=None, plot=True, **kwargs
+):
     """Run the polynomial fit for a given data, x and y columns
 
     Parameters
@@ -532,23 +562,34 @@ def run_fit_curve(data, x_col, y_col, by, cmap, ax=None, plot=True, **kwargs):
         if not ax:
             fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    results_list = []
-    for lt, color in zip(data[by].unique(), cmap):
-        data_lt = data[data[by] == lt].dropna()
-        X = data_lt[x_col].values.reshape(-1, 1)
-        y = data_lt[y_col].values
+    if by is not None:
+        results_list = []
+        for lt, color in zip(data[by].unique(), cmap):
+            data_lt = data[data[by] == lt].dropna()
+            X = data_lt[x_col].values.reshape(-1, 1)
+            y = data_lt[y_col].values
 
+            results = get_best_poly_fit(X, y, **kwargs)
+            results_list.append(results)
+            results[by] = lt
+
+            # Plot RMSE
+            if plot:
+                ax.plot(
+                    results["degrees"],
+                    results["rmses"],
+                    label=f"{lt} [$P_n$ = {results['best_degree']}]",
+                    color=color,
+                )
+    else:
         results = get_best_poly_fit(X, y, **kwargs)
-        results_list.append(results)
-        results[by] = lt
 
         # Plot RMSE
         if plot:
             ax.plot(
                 results["degrees"],
                 results["rmses"],
-                label=f"{lt} [$P_n$ = {results['best_degree']}]",
-                color=color,
+                label=f"[$P_n$ = {results['best_degree']}]",
             )
 
     # Remove axis
