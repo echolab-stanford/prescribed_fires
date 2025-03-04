@@ -47,9 +47,10 @@ def main(cfg: DictConfig):
         .sort_values("year")
     )
 
-    spillover_results = spillover_results[
-        spillover_results.year <= cfg.spillover.year_limit
-    ]
+    if cfg.spillover.year_limit:
+        spillover_results = spillover_results[
+            spillover_results.year <= cfg.spillover.year_limit
+        ]
 
     sim_data = sim_data[sim_data.land_type.isin(cfg.simulation.land_types)]
 
