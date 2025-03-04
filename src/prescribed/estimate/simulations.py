@@ -1,5 +1,6 @@
 import os
 import warnings
+from typing import List, Optional
 
 import duckdb
 import geopandas as gpd
@@ -21,6 +22,7 @@ def make_model(
     mask="sum_severity",
     predict=False,
     new_data=None,
+    weights=None,
 ):
     """Create a model using the linked data
 
@@ -58,6 +60,7 @@ def make_model(
         mask=None,
         predict=False,
         new_data=None,
+        weights=None,
     ):
         sample = linked_data.sample(frac=1, replace=True)
         try:
@@ -67,6 +70,7 @@ def make_model(
                     data=sample,
                     fixef_tol=1e-3,
                     vcov={"CRV1": fes},
+                    weights=weights,
                 )
             else:
                 model = smf.ols(formula, data=sample).fit()
@@ -91,7 +95,14 @@ def make_model(
             tqdm(
                 Parallel(n_jobs=-1, return_as="generator")(
                     delayed(bootstrap_iteration)(
-                        i, linked_data, formula, fes, mask, predict, new_data
+                        i,
+                        linked_data,
+                        formula,
+                        fes,
+                        mask,
+                        predict,
+                        new_data,
+                        weights,
                     )
                     for i in range(k)
                 ),
@@ -117,6 +128,7 @@ def make_model(
                 data=linked_data,
                 fixef_tol=1e-5,
                 vcov={"CRV1": fes},
+                weights=weights,
             )
         else:
             model = smf.ols(formula, data=linked_data).fit()
@@ -194,19 +206,51 @@ def make_predictions_bootstrap(
 
 
 def calculate_benefits(
-    discount_rates,
-    treat_severity,
-    coefs,
-    path=None,
-    n_treats=None,
-    average_treats=False,
+    discount_rates: List[float],
+    treat_severity: pd.DataFrame,
+    coefs: Optional[pd.DataFrame] = None,
+    path: Optional[str] = None,
+    n_treats: Optional[int] = None,
+    average_treats: bool = False,
     **kwargs,
-):
-    """ " Calculate benefits from a specific size policy under different discount rates
+) -> pd.DataFrame:
+    """
+    Calculate benefits from a specific size policy under different discount rates.
 
-    This function will calcualte the total benefit of a prescribed policy using
+    This function calculates the total benefit of a prescribed policy using
     different parameters, including the size of the treatment, the relationship
-    between the emissions and the severity and the discount rate.
+    between the emissions and the severity, and the discount rate.
+
+    Parameters
+    ----------
+    discount_rates : List[float]
+        A list of discount rates to be used in the calculation.
+    treat_severity : pd.DataFrame
+        A DataFrame containing the severity data for the treatment.
+    coefs : Optional[pd.DataFrame], optional
+        A DataFrame containing the coefficients for the model, by default None.
+    path : Optional[str], optional
+        The path to the directory containing the simulation data, by default None.
+    n_treats : Optional[int], optional
+        The number of treatments to be considered, by default None.
+    average_treats : bool, optional
+        Whether to average the treatments, by default False.
+    **kwargs
+        Additional keyword arguments.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the calculated benefits for each discount rate.
+
+    Notes
+    -----
+    This function performs the following steps:
+    1. Retrieves the simulation data merged with the observed dNBR data.
+    2. Calculates three tables:
+       - `dnbr_data`: Contains the severity data for each pixel, fire, and event.
+       - `df`: Contains all the simulations, severity data, and severity benefits using the simulated data.
+       - `sim_severity`: Contains the severity data for each simulation, year, and event, used to calculate the benefits of the policy.
     """
 
     # Get the simulation data merged with the observed dnbr. This dnbr data is
@@ -311,6 +355,21 @@ def calculate_benefits(
     select * from total_event_benefits
     """).to_df()
 
+    # Get coefficients if not provided and check if the provided ones matches the
+    # simulation counts in the data.
+    if coefs is not None:
+        if coefs.shape[0] != df.sim.max():
+            raise ValueError(
+                "The number of simulations in the data is not the same as the number of simulations in the coefficients"
+            )
+    else:
+        coefs = make_model(
+            linked_data=kwargs.get("linked_data"),
+            formula=kwargs.get("formula"),
+            bootstrap=True,
+            k=df.sim.max(),
+        )
+
     # Results from the query above cotain only the events where treatments and
     # fire happened. Thus, all MTBS events are not covered here. We want to have
     # all the events and have the counterfactual and the observed data together
@@ -393,14 +452,18 @@ def calculate_benefits(
 
     # Create a warning if the number of rows is different
     if len(simulation_data) != len(dnbr_data_cross):
-        warnings.warn(
-            "There are some rows that were removed from the simulation data"
-        )
+        prop = (
+            (len(dnbr_data_cross) - len(simulation_data)) / len(simulation_data)
+        ) * 100
+        warnings.warn(f"{prop:.4f}% of rows were removed")
 
     # Calculate benefits for each simulation
     simulation_data["benefit"] = (
         simulation_data["preds_pm"] - simulation_data["preds_sim_pm"]
     )
+
+    # # Remove when benefits are negative
+    # simulation_data = simulation_data[simulation_data.benefit >= 0]
 
     # Calculate the total benefits for each year, sim (aggregate to the State
     # level)s
@@ -429,6 +492,7 @@ def calculate_benefits(
     # Get predictions for each sim index and treatment year
     costs = make_model(
         new_data=new_data,
+        k=df.sim.max(),
         **kwargs,
     )
 
@@ -613,51 +677,69 @@ def simulation_data(
 
 
 def sample_rx_years(
-    template: str | pd.DataFrame,
+    template: str | gpd.GeoDataFrame,
     treat_data: pd.DataFrame,
     fire_data: pd.DataFrame,
     estimates: pd.DataFrame | str,
-    size_treatment: int | None,
+    size_treatment: Optional[int] = None,
     spillovers: bool = False,
-    spillover_size: int | None = 1_000,
-    spillover_estimates: pd.DataFrame | None = None,
+    spillover_size: Optional[int] = 1000,
+    spillover_estimates: Optional[pd.DataFrame] = None,
     start_year: int = 2010,
     sample_n: int = 100,
     crs: str = "EPSG:3310",
 ) -> pd.DataFrame:
-    """Sample years for Rx fires
+    """
+    Sample years for Rx fires.
 
-    This function will take the template data with buffered roads and sample
+    This function takes the template data with buffered roads and samples
     points from the subset to select as treatments. The sample can also be of
     a specific size in which case we draw a square buffer in meters around the
     sampled point and get all the grid_ids that are within that buffer.
 
-    Sampling is done without replacement, so if a pixels is selected in a year
+    Sampling is done without replacement, so if a pixel is selected in a year
     it won't be selected again for other years.
 
     Parameters
     ----------
-    template : geopandas.GeoDataFrame or str
-        A geopandas dataframe with the template data
+    template : Union[str, gpd.GeoDataFrame]
+        A GeoDataFrame with the template data or a string path to the template data.
     treat_data : pd.DataFrame
-        A pandas dataframe with the treatment data
+        A DataFrame with the treatment data.
     fire_data : pd.DataFrame
-        A pandas dataframe with the MTBS treatment data
-    size_treatment : int
-        The size of the treatment in meters
-    sample_n : int
-        The number of samples to take per year
-    start_year : int
-        The year to start sampling from. This would be the first year of
-        treatment
-    crs: str
-        The coordinate reference system to use. Default is California Albers
-        with meters as units.
+        A DataFrame with the MTBS treatment data.
+    estimates : Union[pd.DataFrame, str]
+        A DataFrame with the estimates or a string path to the estimates data.
+    size_treatment : Optional[int], optional
+        The size of the treatment in meters, by default None.
+    spillovers : bool, optional
+        Whether to include spillovers, by default False.
+    spillover_size : Optional[int], optional
+        The size of the spillover in meters, by default 1000.
+    spillover_estimates : Optional[pd.DataFrame], optional
+        A DataFrame with the spillover estimates, by default None.
+    start_year : int, optional
+        The year to start sampling from, by default 2010.
+    sample_n : int, optional
+        The number of samples to take per year, by default 100.
+    crs : str, optional
+        The coordinate reference system to use, by default "EPSG:3310".
 
     Returns
     -------
-        pd.DataFrame
-            A pandas dataframe with the sampled years
+    pd.DataFrame
+        A DataFrame with the sampled years.
+
+    Notes
+    -----
+    This function performs the following steps:
+    1. Prepares the template data by reading it and setting the CRS.
+    2. Iterates over each year from start_year to 2023.
+    3. Samples points from the template data for each year.
+    4. Handles spillovers if specified.
+    5. Tracks sampled grids to avoid resampling in subsequent years.
+    6. Merges sampled data with fire data and estimates.
+    7. Returns the final DataFrame with sampled years.
     """
 
     # Keep columns of interest at the end!

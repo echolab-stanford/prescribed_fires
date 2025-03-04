@@ -41,6 +41,9 @@ def plot_std_diffs(
     draw_cbar=True,
     label=None,
     rotation_x=45,
+    sorted=True,
+    vmax=None,
+    vmin=None,
 ):
     """Plot Standarized Absolute Mean Differences as an array
 
@@ -73,6 +76,34 @@ def plot_std_diffs(
         Figure object
     """
 
+    DEFAULT_ORDER = [
+        "aspect",
+        "curvature",
+        "elevation",
+        "slope",
+        "ppt",
+        "disturbances_no_disturbance",
+        "vpdmin",
+        "vpdmax",
+        "frac_cover_tree",
+        "frac_cover_shrub",
+        "tdmean",
+        "tmin",
+        "tmax",
+        "tmean",
+        "frac_cover_bare",
+        "count_fires",
+        "frac_cover_herbaceous",
+        "disturbances_unattributed_browning",
+        "disturbances_fire",
+        "disturbances_unattributed_greening",
+        "disturbances_timber_harvest",
+        "cummax_frp",
+        "disturbances_drought_forest_die",
+        "Intercept",
+        "land_type",
+    ]
+
     # Open file if a dataframe is not passed
     if isinstance(std_diffs_df, str):
         std_diffs_df = pd.read_csv(std_diffs_df)
@@ -102,7 +133,13 @@ def plot_std_diffs(
             ~std_diffs_grouped.family_covar.isin(drop_vars)
         ]
 
+        # Remove drop vars from the default order
+        DEFAULT_ORDER = [var for var in DEFAULT_ORDER if var not in drop_vars]
+
     # Create pivot table to represent data as an array
+    # Notice here we pick the standarized absolute mean differences! This is
+    # because we want to see the variables that are more problematic in terms of
+    # balance in an absolute scale, different than a Love plot.
     asmd_unweighted_array = pd.pivot_table(
         std_diffs_grouped,
         index="family_covar",
@@ -119,13 +156,23 @@ def plot_std_diffs(
 
     # Plot the array
     # Pre-sort the rows of the array to have the largest values at the bottom
-    sorted_arr = asmd_unweighted_array.loc[
-        asmd_unweighted_array.mean(axis=1).sort_values(ascending=False).index
-    ]
+    if sorted:
+        sorted_arr = asmd_unweighted_array.loc[
+            asmd_unweighted_array.mean(axis=1)
+            .sort_values(ascending=False)
+            .index
+        ]
+    else:
+        sorted_arr = asmd_unweighted_array.loc[DEFAULT_ORDER]
 
-    # Top code all values above 0.2 as 0.2
+    # Normalize the pallete to take a range from 0 to 1
+    norm = plt.Normalize(
+        vmin=np.min(sorted_arr) if vmin is None else vmin,
+        vmax=np.max(sorted_arr) if vmax is None else vmax,
+    )
+
     arr = sorted_arr.values
-    cax = ax.imshow(arr, cmap=palette, aspect="auto")
+    cax = ax.imshow(arr, cmap=palette, norm=norm, aspect="auto")
 
     # Add a colorbar to the plot and a title to the colorbar
     if draw_cbar:
@@ -173,7 +220,7 @@ def plot_std_diffs(
     if save_path:
         plt.savefig(save_path, bbox_inches="tight")
 
-    return ax
+    return ax, arr.min(), arr.max()
 
 
 def plot_loss_check(path_to_losses, best_model_path):
@@ -303,117 +350,92 @@ def plot_std_diffs_focal_year(
 
 
 def plot_outcomes(
-    df_conifer,
-    df_shrub,
-    axes_names,
-    var_interest="att",
-    cmap_conifer="Oranges",
-    cmap_shrub="Blues",
-    colors=("#fdc086", "#a6cee3"),
-    order=1,
-    dotted=0,
-    robust=False,
-    lowess=False,
-    legend=False,
-    colorbar=False,
-    ax=None,
-    label=None,
-    pooled=False,
+    dfs: list[pd.DataFrame],
+    axes_names: list[str],
+    cmaps: list[str],
+    colors: list[str],
+    labels: list[str],
+    var_interest: str = "att",
+    order: int = 1,
+    dotted: int = 0,
+    robust: bool = False,
+    lowess: bool = False,
+    legend: bool = False,
+    ax: plt.Axes = None,
+    label_fig: str = None,
+    pooled: bool = False,
+    reg_plot: bool = False,
     **kwargs,
-):
-    # Colors sep
-    col_a, col_b = colors
+) -> plt.Axes:
+    """Plot outcomes for main results"""
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 4))
 
     if pooled:
-        # Sort dfs to make sure plots are nice
-        df_conifer = df_conifer.sort_values("year")
-        df_shrub = df_shrub.sort_values("year")
+        time_var = "year"
+        for df, cmap, color, label in zip(dfs, cmaps, colors, labels):
+            # Sort dfs to make sure plots are nice
+            df_type = df.sort_values(time_var)
 
-        df_conifer.plot(
-            x="year",
-            y="coef",
-            color=col_a,
-            legend=False,
-            label="Conifers",
-            ax=ax,
-        )
-        ax.fill_between(
-            df_conifer["year"],
-            df_conifer["low_ci"],
-            df_conifer["high_ci"],
-            color=col_a,
-            alpha=0.2,
-        )
-
-        df_shrub.plot(
-            x="year",
-            y="coef",
-            color=col_b,
-            legend=False,
-            label="Shurblands",
-            ax=ax,
-        )
-        ax.fill_between(
-            df_shrub["year"],
-            df_shrub["low_ci"],
-            df_shrub["high_ci"],
-            color=col_b,
-            alpha=0.2,
-        )
-
+            df_type.plot(
+                x=time_var,
+                y="coef",
+                color=color,
+                legend=False,
+                label=label,
+                ax=ax,
+            )
+            ax.fill_between(
+                df_type[time_var],
+                df_type["low_ci"],
+                df_type["high_ci"],
+                color=color,
+                alpha=0.2,
+            )
     else:
-        df_conifer[
-            (df_conifer.lag >= 0) & (df_conifer.focal_year <= 2021)
-        ].plot.scatter(
-            x="lag",
-            y=var_interest,
-            c="focal_year",
-            cmap=cmap_conifer,
-            ax=ax,
-            alpha=0.5,
-            colorbar=False,
-        )
+        time_var = "lag"
+        for df, cmap, color, label in zip(dfs, cmaps, colors, labels):
+            if "focal_year" not in df.columns:
+                raise KeyError(
+                    "focal_year is not in the dataframe. Maybe you want to pass pooled=True"
+                )
 
-        df_shrub[
-            (df_shrub.lag >= 0) & (df_shrub.focal_year <= 2021)
-        ].plot.scatter(
-            x="lag",
-            y=var_interest,
-            c="focal_year",
-            cmap=cmap_shrub,
-            ax=ax,
-            alpha=0.5,
-            colorbar=colorbar,
-        )
+            # sns.scatterplot(
+            #     x=time_var,
+            #     y=var_interest,
+            #     data=df[(df[time_var] >= 0) & (df["focal_year"] <= 2021)],
+            #     hue="focal_year",
+            #     palette=cmap,
+            #     size="control_count",
+            #     ax=ax,
+            #     alpha=0.5,
+            #     legend=True,
+            # )
 
-        sns.regplot(
-            x="lag",
-            y=var_interest,
-            data=df_conifer[(df_conifer.focal_year <= 2021)],
-            scatter=False,
-            ax=ax,
-            color="#7fc97f",
-            label="Conifers",
-            order=order,
-            lowess=lowess,
-            robust=robust,
-        )
-
-        sns.regplot(
-            x="lag",
-            y=var_interest,
-            data=df_shrub[(df_shrub.focal_year <= 2021)],
-            scatter=False,
-            ax=ax,
-            color="#beaed4",
-            label="Shrublands",
-            order=order,
-            lowess=lowess,
-            robust=robust,
-        )
+            df[(df[time_var] >= 0) & (df["focal_year"] <= 2021)].plot.scatter(
+                x=time_var,
+                y=var_interest,
+                c="focal_year",
+                cmap=cmap,
+                ax=ax,
+                alpha=0.5,
+                s="control_count",
+                colorbar=False,
+            )
+            if reg_plot:
+                sns.regplot(
+                    x=time_var,
+                    y=var_interest,
+                    data=df[(df["focal_year"] <= 2021)],
+                    scatter=False,
+                    ax=ax,
+                    color=color,
+                    label=label,
+                    order=order,
+                    lowess=lowess,
+                    robust=robust,
+                )
 
     if legend:
         ax.legend(loc="upper right")
@@ -425,11 +447,17 @@ def plot_outcomes(
 
     ax.axhline(dotted, color="black", linestyle="--", c="gray")
 
+    # Set the x-axis ticks so they start at 1 and end at the end of the data
+
+    # Get max value from the data
+    max_val = max([df[time_var].max() for df in dfs])
+    ax.set_xticks(range(1, np.int8(max_val) + 1))
+
     ax = template_plots(
         ax,
         ylab=axes_names[1],
         xlab=axes_names[0],
-        label=label if label is not None else None,
+        label=label_fig if label_fig is not None else None,
         rotation_x=0,
         **kwargs,
     )
@@ -616,8 +644,14 @@ def run_fit_curve(
 
 
 def data_fire_plot(
-    wide_treats, frp, dnbr, emissions, year=None, event_id=None, mtbs=None
-):
+    wide_treats: pd.DataFrame,
+    frp: pd.DataFrame,
+    dnbr: pd.DataFrame,
+    emissions: pd.DataFrame | None = None,
+    year: int | None = None,
+    event_id: str | None = None,
+    mtbs: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
     """Util function to build a dataframe ready for plotting combining data
     sources
 
@@ -670,7 +704,7 @@ def data_fire_plot(
                 "You need to pass a path to the MTBS data if you pass a path to the dNBR data to assign year from the Event ID"
             )
 
-    if isinstance(emissions, str):
+    if isinstance(emissions, str) and emissions is not None:
         emissions = pd.read_feather(emissions)
 
     if year is not None:
@@ -684,9 +718,11 @@ def data_fire_plot(
         # Merge with dnbr and frp
         frp_year = frp[frp.year == year]
         dnbr_year = dnbr[dnbr.year == year].drop(columns=["lat", "lon"])
-        emissions_year = emissions[emissions.year == year].drop(
-            columns=["lat", "lon"]
-        )
+
+        if emissions is not None:
+            emissions_year = emissions[emissions.year == year].drop(
+                columns=["lat", "lon"]
+            )
 
         fires = frp_year.merge(dnbr_year, on=["grid_id", "year"])
 
@@ -694,7 +730,10 @@ def data_fire_plot(
         fires = fires.merge(test_treats, on=["grid_id", "year"])
 
         # Merge with the emissions
-        fires = fires.merge(emissions_year, on=["grid_id", "year"], how="left")
+        if emissions is not None:
+            fires = fires.merge(
+                emissions_year, on=["grid_id", "year"], how="left"
+            )
 
         fires["treat_dnbr"] = (
             fires[f"treat_{year}"] * fires[f"class_dnbr_{year}"]
@@ -713,9 +752,15 @@ def data_fire_plot(
             sep="_",
         ).reset_index()
 
+        reduc_list = (
+            [frp, dnbr, emissions, long_treatments]
+            if emissions is not None
+            else [frp, dnbr, long_treatments]
+        )
+
         fire = reduce(
             lambda x, y: pd.merge(x, y, on=["grid_id", "year"], how="left"),
-            [frp, dnbr, emissions, long_treatments],
+            reduc_list,
         )
 
         fire["treat_severity"] = np.where(
@@ -870,7 +915,7 @@ def template_plots(
     plt.setp(
         ax.get_xticklabels(),
         rotation=rotation_x,
-        ha="right",
+        ha="center",
         rotation_mode="anchor",
     )
 

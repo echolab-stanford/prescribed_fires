@@ -363,7 +363,8 @@ def calculate_spillover_estimator(
     weights: pd.DataFrame,
     fire_data: pd.DataFrame,
     focal_years: list,
-    distance: int,
+    min_distance: int,
+    max_distance: int,
     pooling: bool = False,
     estimator: str = "rr",
     dep_var: str = "fire",
@@ -427,7 +428,9 @@ def calculate_spillover_estimator(
     ):
         # Subset fire data for treatemnts
         treats = treatments[
-            (treatments.distance < distance) & (treatments.year == focal_year)
+            (treatments.distance > min_distance)
+            & (treatments.distance < max_distance)
+            & (treatments.year == focal_year)
         ]
         fire_data_treats = fire_data[
             fire_data.grid_id.isin(treats.grid_id)
@@ -488,7 +491,7 @@ def calculate_spillover_estimator(
         df = pooling_estimates(df, **kwargs)
 
     # Add distance just to keep track of treatments
-    df["dist_treat"] = distance
+    df["dist_treat"] = max_distance
 
     return df
 

@@ -5,7 +5,73 @@ from .report import report_treatments
 from ..utils import prepare_template
 
 
-def fill_treatment_template_frp(frp: str, template_path: str, treatments_path: str):
+def classify_dnbr(
+    df: pd.DataFrame, dnbr: str = "dnbr", class_name: str = "class_dnbr"
+) -> pd.DataFrame:
+    """
+    Find the DNBR class from the earliest fire per each grid using the
+    DNBR threshold values from Key & Benson (2006)
+
+    Parameters:
+    ----------
+        df (pd.DataFrame): DataFrame with the DNBR values
+        dnbr (str): Column name with the DNBR values
+        class_name (str): Column name for the DNBR class
+
+    Returns:
+    -------
+        pd.DataFrame: DataFrame with the DNBR class
+    """
+    conditions = [
+        (df[dnbr] < 100),
+        (df[dnbr] >= 100) & (df[dnbr] < 270),
+        (df[dnbr] >= 270) & (df[dnbr] < 440),
+        (df[dnbr] >= 440) & (df[dnbr] < 660),
+        df[dnbr] >= 660,
+    ]
+    # zero-index to match the low-intensity level to be 1.
+    choices = [0, 1, 2, 3, 4]
+
+    # Asigning FRP class to each fire
+    df.loc[:, class_name] = np.select(conditions, choices, default=np.nan)
+
+    return df
+
+
+def classify_frp(
+    df: pd.DataFrame, frp: str = "frp", class_name: str = "class_frp"
+) -> pd.DataFrame:
+    """Find the FRP class from the earliest fire per each grid using the
+    FRP threshold values (Ichoku et al. 2014)
+
+    Parameters:
+    ----------
+        df (pd.DataFrame): DataFrame with the FRP values
+        frp (str): Column name with the FRP values
+        class_name (str): Column name for the FRP class
+
+    Returns:
+    -------
+        pd.DataFrame: DataFrame with the FRP class
+    """
+    conditions = [
+        (df[frp] > 0) & (df[frp] < 100),
+        (df[frp] >= 100) & (df[frp] < 500),
+        (df[frp] >= 500) & (df[frp] < 1000),
+        (df[frp] >= 1000) & (df[frp] < 1500),
+        df[frp] >= 1500,
+    ]
+    choices = [1, 2, 3, 4, 5]
+
+    # Asigning FRP class to each fire
+    df.loc[:, class_name] = np.select(conditions, choices, default=np.nan)
+
+    return df
+
+
+def fill_treatment_template_frp(
+    frp: str, template_path: str, treatments_path: str
+):
     """Aux function to merge template with FRP data and build intensity based treatments
 
     Just like `fill_treatment_template_mtbs`, but based for FRP. This is using
@@ -52,7 +118,9 @@ def fill_treatment_template_frp(frp: str, template_path: str, treatments_path: s
 
     # Merge with MTBS treats and keep all the FRP readings
     frp = frp.merge(treatments, on=["grid_id", "year"], how="left")
-    frp.loc[(frp.frp > 0) & (frp.Event_ID.isna()), "Event_ID"] = "frp_fire_event"
+    frp.loc[(frp.frp > 0) & (frp.Event_ID.isna()), "Event_ID"] = (
+        "frp_fire_event"
+    )
 
     # Create treatments columns (here is just fire!)
     frp["treat"] = np.where(frp.frp > 0, 1, 0)
@@ -140,7 +208,9 @@ def fill_treatment_template_mtbs(
         ),
     )
 
-    treatments["count_treats"] = treatments.groupby("grid_id").treat.transform("cumsum")
+    treatments["count_treats"] = treatments.groupby("grid_id").treat.transform(
+        "cumsum"
+    )
 
     if staggered:
         # Reduce sample! Only keep the pixels that have only one that treatments
@@ -220,7 +290,9 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
             if "year" not in data.columns:
                 data["year"] = data.time.dt.year
 
-            frp_groupped = data.groupby(["grid_id", "year"], as_index=False).frp.max()
+            frp_groupped = data.groupby(
+                ["grid_id", "year"], as_index=False
+            ).frp.max()
             if covariates_dict[key]["classify"]:
                 # Find the FRP class from the earliest fire per each grid using the
                 # FRP threshold values (Ichoku et al. 2014):
@@ -275,7 +347,9 @@ def build_lhs(covariates_dict: dict[str, dict]) -> pd.DataFrame:
 
 
 def treatment_schedule(
-    treatment_template: pd.DataFrame, treatment_fire: dict, no_class: bool = False
+    treatment_template: pd.DataFrame,
+    treatment_fire: dict,
+    no_class: bool = False,
 ) -> pd.DataFrame:
     """Create treatment dataframe organized by year and grid_id
 
@@ -330,7 +404,9 @@ def treatment_schedule(
     # Set all NaN values as zero for the class columns:
     # class_frp and class_dnbr
     treatment_template["class_frp"] = treatment_template["class_frp"].fillna(0)
-    treatment_template["class_dnbr"] = treatment_template["class_dnbr"].fillna(0)
+    treatment_template["class_dnbr"] = treatment_template["class_dnbr"].fillna(
+        0
+    )
 
     # If the treatment definition is not given by classes, we can just shut these
     # and leave them as 1, such as when multiplied by the treatment they're always
@@ -341,7 +417,9 @@ def treatment_schedule(
 
     # Drop coordinate columns
     treatment_template.drop(
-        columns=[c for c in treatment_template.columns if "lon" in c or "lat" in c],
+        columns=[
+            c for c in treatment_template.columns if "lon" in c or "lat" in c
+        ],
         inplace=True,
     )
 
