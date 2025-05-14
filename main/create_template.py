@@ -16,11 +16,14 @@ main directory:
 """
 
 import os
-import argparse
 import geopandas as gpd
+import hydra
+from omegaconf import DictConfig
 
 
-def create_grid(path_shapefile, resolution, projection, iso_code, save_path="temp"):
+def create_grid(
+    path_shapefile, resolution, projection, iso_code, save_path="temp"
+):
     """Create grid using shapefile and GDAL rasterize command
 
     Use the Natural Earth shapefile of the world to create a grid for a given
@@ -77,50 +80,20 @@ def create_grid(path_shapefile, resolution, projection, iso_code, save_path="tem
     return None
 
 
-if __name__ == "__main__":
-    # Define input arguments
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--path_shapefile",
-        required=True,
-        type=str,
-        help="Path to shapefile",
-    )
-    parser.add_argument(
-        "--resolution",
-        type=float,
-        default=1000,
-        help="Resolution of grid in meters",
-    )
-    parser.add_argument(
-        "--projection",
-        type=int,
-        default=3310,
-        help="EPSG code of projection to use for grid. Default is California meters using albers equal area projection (EPSG:3310)",
-    )
-    parser.add_argument(
-        "--iso_code",
-        type=str,
-        default="US-CA",
-        help="ISO 3166-1 alpha-3 country code for country of interest. Default is California USA: US-CA",
-    )
-    parser.add_argument(
-        "--save_path",
-        type=str,
-        default="temp",
-        help="Path to save grid. Default is temp folder in the same directory as the script.",
-    )
-
-    # Parse arguments
-    args = parser.parse_args()
-
-    # Create grid
+@hydra.main(
+    config_path="../conf",
+    config_name="create_template.yaml",
+    version_base=None,
+)
+def main(cfg: DictConfig) -> None:
     create_grid(
-        path_shapefile=args.path_shapefile,
-        resolution=args.resolution,
-        projection=args.projection,
-        iso_code=args.iso_code,
-        save_path=args.save_path,
+        path_shapefile=cfg.path_shapefile,
+        resolution=cfg.resolution,
+        projection=cfg.projection,
+        iso_code=cfg.iso_code,
+        save_path=cfg.save_path,
     )
+
+
+if __name__ == "__main__":
+    main()

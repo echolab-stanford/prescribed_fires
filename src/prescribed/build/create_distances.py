@@ -106,6 +106,9 @@ def create_distances(
     buffer_treatment : Optional[int], optional
         The buffer distance in meters for the treatment definition, by default
         10000
+    size_threshold : Optional[int], optional
+        The size threshold in acres to filter the polygons, by default None.
+        This uses the BurnBndAc column in the MTBS shapefile.
     kwargs : dict
         Additional parameters for the `calculate_fire_pop_dens` function
 

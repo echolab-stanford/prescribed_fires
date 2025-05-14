@@ -1,13 +1,11 @@
-defaults: 
+defaults:
   - _self_
+  - compute: linux_machine
+  - data: default
+  - optim: small_grid
+  - tyra: mtbs_treats
+  - crs: "EPSG:3310"
 
 hydra:
   run:
     dir: outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
-
-root_path: "/mnt/sherlock/oak/prescribed_data"
-save_path: "${root_path}/processed"
-data_path: "${root_path}/raw"
-template: "${root_path}/geoms/templates/template.tif"
-mask: "${root_path}/geoms/california_geom/datacalifornia_geom.shp"
-mtbs_shapefile: "${root_path}/geoms/mtbs_perims_DD_updated/mtbs_perims_DD.shp"

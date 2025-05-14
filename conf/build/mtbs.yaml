@@ -1,14 +1,13 @@
-template: "${template}"
 treat_type: mtbs
-treatments_path: "${save_path}/treatments_mtbs.feather"
+treatments_path: "${compute.processed}/treatments_mtbs.feather"
 query: "Incid_Type != 'Prescribed Fire'"
 staggered: false
 verbose: false
-save_path: "${save_path}/wide_treatments_gee"
+save_path: "${compute.processed}/wide_treatments_gee"
 lhs:
   frp: 
-    path: ${save_path}/frp_nominal_conf/frp_concat.feather
+    path: ${compute.processed}/frp_nominal_conf/frp_concat.feather
     classify: true
   dnbr: 
-    path: ${save_path}/dnbr_gee/dnbr_long.feather
+    path: ${compute.processed}/dnbr_gee/dnbr_long.feather
     classify: true

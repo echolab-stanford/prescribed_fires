@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 @hydra.main(
     config_path="../conf",
     version_base=None,
-    config_name="config.yaml",
+    config_name="config",
 )
 def main(cfg: DictConfig) -> None:
     log.info(f"Building dataset using {cfg.build.treat_type}")
@@ -51,7 +51,9 @@ def main(cfg: DictConfig) -> None:
         os.mkdir(cfg.build.save_path)
 
     treatments.to_feather(
-        os.path.join(cfg.build.save_path, f"wide_treats_{cfg.build.treat_type}.feather")
+        os.path.join(
+            cfg.build.save_path, f"wide_treats_{cfg.build.treat_type}.feather"
+        )
     )
 
 

@@ -114,7 +114,9 @@ def create_treatments(
         # Redefine cols
         cols = cols + ["buffer", "tresh", "buffer_treat"]
 
-        pop_dens = calculate_fire_pop_dens(geoms=wildfires, template=template, **kwargs)
+        pop_dens = calculate_fire_pop_dens(
+            geoms=wildfires, template=template, **kwargs
+        )
 
         # Calculate threshold and subset geometry
         tresh = pop_dens.total_pop.quantile([threshold]).values[0]
@@ -134,7 +136,9 @@ def create_treatments(
         wildfires_meters["buffer_treat"] = buffer_treatment
 
         # Drop unnecesary geometry columns
-        wildfires_meters = wildfires_meters.drop(columns=["donut"], errors="ignore")
+        wildfires_meters = wildfires_meters.drop(
+            columns=["donut"], errors="ignore"
+        )
 
     # Create year column to add time dimension
     wildfires_meters["year"] = wildfires_meters.Ig_Date.dt.year
@@ -163,7 +167,9 @@ def create_treatments(
 
     # Convert xarray to dataframe and add correct event_id data back!
     wildfire_df = (
-        wildfire_arr.drop_dims(["Event_ID_categories"]).to_dataframe().reset_index()
+        wildfire_arr.drop_dims(["Event_ID_categories"])
+        .to_dataframe()
+        .reset_index()
     )
 
     # Merge with subset data from original MTBS
@@ -180,22 +186,22 @@ def create_treatments(
     return None
 
 
-@hydra.main(config_path="../conf", config_name="treatments")
+@hydra.main(config_path="../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     log.info("Building dataset")
     create_treatments(
         mtbs_shapefile=cfg.treatments.mtbs_shapefile,
-        template=cfg.treatments.template,
-        save_path=cfg.treatments.save_path,
+        template=cfg.data.template,
+        save_path=cfg.build.save_path,
         spillovers=cfg.treatments.spillovers,
         threshold=cfg.treatments.threshold,
         buffer_treatment=cfg.treatments.buffer_treatment,
         buffer=cfg.treatments.buffer,
         pop_raster_path=cfg.treatments.pop_raster_path,
-        mask=cfg.treatments.mask,
+        mask=cfg.data.mask,
     )
 
-    log.info(f"File saved to {cfg.treatments.save_path}!")
+    log.info(f"File saved to {cfg.build.save_path}!")
 
 
 if __name__ == "__main__":

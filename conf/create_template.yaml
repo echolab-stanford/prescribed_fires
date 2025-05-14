@@ -1,0 +1,6 @@
+# Configuration for create_template.py
+path_shapefile: ${compute.geoms}/california_geom/computecalifornia_geom.shp
+resolution: 1000
+projection: 3310
+iso_code: "US-CA"
+save_path: ${compute.geoms}/templates

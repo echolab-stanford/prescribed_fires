@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 @hydra.main(
     config_path="../conf",
     version_base=None,
-    config_name="config.yaml",
+    config_name="config",
 )
 def main(cfg: DictConfig) -> None:
     log.info(
@@ -20,7 +20,7 @@ def main(cfg: DictConfig) -> None:
         log.info(f"Building dataset using {dist}")
         create_distances(
             mtbs_shapefile=cfg.mtbs_shapefile,
-            template=cfg.template,
+            template=cfg.data.template,
             buffer=dist,
             pop_threshold=cfg.build.pop_threshold,
             buffer_treatment=dist,

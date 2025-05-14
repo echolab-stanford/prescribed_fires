@@ -1,13 +1,13 @@
-template: "${template}"
+template: "${data.template}"
 treat_type: frp
-frp: "${save_path}/frp_nominal_conf/frp_concat.feather"
-treatments_path: "${save_path}/treatments_mtbs.feather"
+frp: "${raw.processed}/frp_nominal_conf/frp_concat.feather"
+treatments_path: "${raw.processed}/treatments_mtbs.feather"
 query: "Incid_Type != 'Prescribed Fire'"
-save_path: "${save_path}/wide_treatments_gee_inmediate"
+save_path: "${raw.processed}/wide_treatments_gee_inmediate"
 lhs:
   frp: 
-    path: ${save_path}/frp_nominal_conf/frp_concat.feather
+    path: ${raw.processed}/frp_nominal_conf/frp_concat.feather
     classify: true
   dnbr: 
-    path: ${save_path}/dnbr_gee_inmediate/dnbr_long.feather
+    path: ${raw.processed}/dnbr_gee_inmediate/dnbr_long.feather
     classify: true

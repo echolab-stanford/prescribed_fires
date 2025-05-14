@@ -11,15 +11,14 @@ simulation:
   step_save: 10
   size_treatment: 1000
   format: "parquet"
-  spillovers: False
+  spillovers: false
   spillover_size: 2000
   template_years: [2000, 2022]
 
 spillover:
   dist_treat: 2000
-  year_limit: 7
+  year_limit: false
 
 land_type_mapping:
   conifers: 2.0
   shrublands: 12.0
-
