@@ -1,12 +1,32 @@
-# Prescribed and low-intensity/severity fires project
+# The air pollution benefits of low-severity fire
 
-This repo has all the replication data for the low-intensity and severity project. In this project we estimate the effects of specific fire events on the future fire dynamics (i.e probability of future fire, its intensity and severity, and the prevented emissions from fire treatments). To do this, we rely on two main approaches: _synthtetic control_ and _differences in differences_. This repo contains code to execute data processing and estimation of the described effects in the paper. 
+This repo has all the replication data for the low-intensity and severity project. In this project we estimate the effects of specific fire events on the future fire dynamics (i.e probability of future fire and severity, and the prevented emissions from fire treatments through a simulated experiment). To do this, we rely on _synthtetic control_ to build counterfactuals to our treated areas, defined as low-intensity wildfires. This repo contains code to execute data processing and estimation of the described effects in the paper. 
 
-## Quick replication
-You can quickly replicate the data and results pipeline by running the makefile in this repo. Before running it, be sure to follow the next steps:
+## Installation
+Make sure to install all the needed libraries in the `environment.yml` file. If using conda, you can use just run `conda [mamba] env create -f environment.yml`. If running the balancing code, you need to be sure to have PyTorch (> 2.0.0) installed. 
 
-1. Create a local environment or use the provided Docker image as discussed in the [Running experiments](#running-experiments) section. 
-2. Change the configuration files in `conf/` to match your local paths  
+After activating this environment, you can either run: 
+
+```bash
+pip install prescribed 
+```
+
+Or if you want to make changes to the codebase, you can test these changes running `pip` at the root of this repo: 
+
+```bash
+pip install -e .
+```
+
+## Replication code and configuration files
+
+> [!NOTE]
+> We use [Hydra][10] to manage code execution and configuration. Ideally, you can run all models and cleaning data from the command-line. 
+
+Once you have set up the Python environment and successfully installed the code base, you can start runnning some of the code. Before this is important to make sure that the configuration files are set up correctly. We use data from different sources and we provide all the code to process and have them _analysis ready_. To do this, we use different scripts and a `template` file that will harmonize all datasets to a common grid and assure spatial alignment of all our data. 
+
+The first step in replication is making sure that Python can find your files, to do that, we need to make 
+sure that you define a configuration with all the needed paths:
+
 <details>
 <summary><i>Example with data extraction configuration</i></summary>
 
