@@ -9,7 +9,9 @@ from functools import reduce
 import hydra
 import pandas as pd
 from omegaconf import DictConfig
-from prescribed.estimate.run_balancing_spillovers import run_balancing_spillovers
+from prescribed.estimate.run_balancing_spillovers import (
+    run_balancing_spillovers,
+)
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +63,7 @@ def prepare_data(dict_paths, treats_long, focal_year):
 @hydra.main(
     config_path="../conf",
     version_base=None,
-    config_name="config.yaml",
+    config_name="config",
 )
 def main(cfg: DictConfig) -> None:
     log.info("Building dataset")

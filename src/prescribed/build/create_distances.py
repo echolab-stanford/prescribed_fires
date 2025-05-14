@@ -108,7 +108,8 @@ def create_distances(
         10000
     size_threshold : Optional[int], optional
         The size threshold in acres to filter the polygons, by default None.
-        This uses the BurnBndAc column in the MTBS shapefile.
+        This uses the BurnBndAc column in the MTBS shapefile. Anything under this
+        value will be kept!
     kwargs : dict
         Additional parameters for the `calculate_fire_pop_dens` function
 

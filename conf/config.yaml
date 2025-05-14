@@ -2,9 +2,11 @@ defaults:
   - _self_
   - compute: linux_machine
   - data: default
+  - build: mtbs
   - optim: small_grid
   - tyra: mtbs_treats
-  - crs: "EPSG:3310"
+
+config: "EPSG:3310"
 
 hydra:
   run:
