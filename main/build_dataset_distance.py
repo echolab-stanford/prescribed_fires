@@ -19,14 +19,14 @@ def main(cfg: DictConfig) -> None:
     for dist in cfg.build.pop_buffer:
         log.info(f"Building dataset using {dist}")
         create_distances(
-            mtbs_shapefile=cfg.mtbs_shapefile,
+            mtbs_shapefile=cfg.data.mtbs,
             template=cfg.data.template,
             buffer=dist,
             pop_threshold=cfg.build.pop_threshold,
             buffer_treatment=dist,
             pop_raster_path=cfg.build.pop_raster_path,
-            mask=cfg.mask,
-            save_path=cfg.build.save_path,
+            mask=cfg.data.mask,
+            save_path=cfg.compute.save_path,
         )
 
 

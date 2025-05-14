@@ -1,7 +1,5 @@
-mtbs_shapefile: ${data.mtbs_shapefile}
 pop_raster_path: ${compute.raw}/population
 save_path:  ${compute.save_path}/distances_treatments
-
 pop_threshold: 0.5
 pop_buffer:
  - 10000
