@@ -365,6 +365,7 @@ def plot_outcomes(
     label_fig: str = None,
     pooled: bool = False,
     reg_plot: bool = False,
+    size: str | None = None,
     **kwargs,
 ) -> plt.Axes:
     """Plot outcomes for main results"""
@@ -420,7 +421,7 @@ def plot_outcomes(
                 cmap=cmap,
                 ax=ax,
                 alpha=0.5,
-                s="control_count",
+                s=size if size else None,
                 colorbar=False,
             )
             if reg_plot:

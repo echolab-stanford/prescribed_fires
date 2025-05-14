@@ -68,6 +68,7 @@ def create_distances(
     save_path: Optional[str] = None,
     pop_threshold: Optional[float] = 0.5,
     buffer_treatment: Optional[int] = 5_000,
+    size_threshold: Optional[int] = None,
     **kwargs,
 ) -> None:
     """Create gridded treatments from MTBS dataset using a grid template
@@ -129,6 +130,12 @@ def create_distances(
     else:
         wildfires = mtbs_shapefile
 
+    # Filter for size threshold (get only fires below a certain size)
+    if size_threshold is not None:
+        wildfires = wildfires[
+            wildfires["BurnBndAc"] <= size_threshold
+        ].reset_index(drop=True)
+
     # Get grid_ids from template and merge with each year later
     template_df = (
         prepare_template(template)
@@ -170,7 +177,9 @@ def create_distances(
         )
 
         # Drop unnecesary geometry columns from population subset
-        wildfires_meters = wildfires_meters.drop(columns=["donut"], errors="ignore")
+        wildfires_meters = wildfires_meters.drop(
+            columns=["donut"], errors="ignore"
+        )
     else:
         wildfires_meters = wildfires_meters.assign(
             tresh=np.nan, boundary=wildfires_meters.geometry.boundary
@@ -180,7 +189,9 @@ def create_distances(
     wildfires_meters["year"] = wildfires_meters.Ig_Date.dt.year
 
     # and now create the geoms we need to define treatment/control areas
-    wildfires_meters["buffer"] = wildfires_meters.geometry.buffer(buffer_treatment)
+    wildfires_meters["buffer"] = wildfires_meters.geometry.buffer(
+        buffer_treatment
+    )
     wildfires_meters["donut"] = wildfires_meters["buffer"].difference(
         wildfires_meters["geometry"]
     )
@@ -204,7 +215,9 @@ def create_distances(
             rasterize_function=partial(rasterize_image, all_touched=True),
         )
 
-        df_wildfire = transform_to_category(wildfire_polygons, var_name="wildfire")
+        df_wildfire = transform_to_category(
+            wildfire_polygons, var_name="wildfire"
+        )
 
         # Use geocube to rasterize the fire boundary
         data["geometry"] = (
@@ -219,10 +232,14 @@ def create_distances(
             rasterize_function=partial(rasterize_image, all_touched=True),
         )
 
-        df_boundaries = transform_to_category(wildfire_boundaries, var_name="boundary")
+        df_boundaries = transform_to_category(
+            wildfire_boundaries, var_name="boundary"
+        )
 
         # Use geocube to rasterize the shapefile donuts (buffer around fires)
-        data["geometry"] = data["donut"].values  # gpd.set_geometry() not working
+        data["geometry"] = data[
+            "donut"
+        ].values  # gpd.set_geometry() not working
         wildfire_polygons = make_geocube(
             vector_data=data,
             measurements=["Event_ID"],
@@ -256,7 +273,9 @@ def create_distances(
 
         # Merge all data frames on lat/lon with reduce and add the year
         merged = reduce(
-            lambda left, right: pd.merge(left, right, on=["lat", "lon"], how="inner"),
+            lambda left, right: pd.merge(
+                left, right, on=["lat", "lon"], how="inner"
+            ),
             [df_wildfire, df_boundaries, df_donut, df_dist],
         )
         merged["year"] = data.year.unique()[0]

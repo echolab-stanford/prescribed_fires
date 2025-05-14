@@ -39,41 +39,6 @@ data_proc <- "/mnt/sherlock/oak/prescribed_data/processed/"
 mode <- function(codes) {
     which.max(tabulate(codes))
 }
-
-### Aux functions
-theme_pset <- function(
-    angle = 90,
-    axis_text_size = 10,
-    axis_title_size = 12,
-    title_size = 15,
-    legend_text_size = 12,
-    strip_text_size = 15,
-    legend_position = "bottom") {
-    theme_bw(base_size = 12) %+replace%
-        theme(
-            text = element_text(size = 16, family = "mono"),
-            axis.text.x = element_text(
-                angle = angle, hjust = NULL, vjust = 0.5
-            ),
-            panel.background = element_blank(),
-            panel.grid.major = element_blank(),
-            panel.grid.minor = element_blank(),
-            strip.background = element_blank(),
-            plot.background = element_rect(fill = "white", colour = NA),
-            legend.background = element_rect(fill = "transparent", colour = NA),
-            legend.key = element_rect(fill = "transparent", colour = NA),
-            axis.text = element_text(size = axis_text_size),
-            axis.title = element_text(size = axis_title_size),
-            title = element_text(size = title_size),
-            legend.text = element_text(size = legend_text_size),
-            strip.text = element_text(size = strip_text_size),
-            legend.position = legend_position,
-            legend.box = "horizontal",
-            legend.box.just = "top",
-            legend.title.align = 0.5,
-        )
-}
-
 ################################################################################
 
 ## us shape
@@ -161,7 +126,7 @@ overlap_list <- lapply(coverage_threshold, function(x) {
             coverage_perc = as.numeric(intersection_area / burn_area),
             mtbs_coverage_perc = as.numeric(intersection_area / mtbs_burn_area)
         )][
-            (coverage_perc < x) | !((IDate - 7 < Ig_Date) &
+            (mtbs_coverage_perc < x) | !((IDate - 7 < Ig_Date) &
                 (FDate + 7 > Ig_Date)),
             (subset_cols) := lapply(.SD, function(x) NA),
             .SDcols = subset_cols
@@ -220,6 +185,7 @@ data_list_tresh <- lapply(events_by_tresh, function(events) {
     return(data_list)
 }) %>%
     bind_rows()
+
 
 ################################################################################
 ##################### AGGREGATE LINKED SMOKE PM BY EVENT_ID/ID #################

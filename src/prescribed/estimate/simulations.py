@@ -116,7 +116,10 @@ def make_model(
         if predict:
             coef_arr = np.array(valid_results)
         else:
-            coef_arr = np.zeros((len(valid_results), 2))
+            # Use the first valid result to initialize the array
+            # This should be the number of coefficients picked using the mask
+            # so if the model is quadratic, we should have 2 coefficients.
+            coef_arr = np.zeros((len(valid_results), valid_results[0].shape[0]))
             coef_arr[: len(valid_results), :] = np.array(valid_results)
 
         return coef_arr
@@ -179,10 +182,10 @@ def make_predictions_bootstrap(
     # To do: for now the quadratic transformation is not implemented and we're
     # just hardcoding stuff and make it work assuming we always have a quadratic
     # transformation. np.vander doesn't play well with > 1-D arrays.
-    severity_squared = severity_array**2
+    # severity_squared = severity_array**2
 
     # Now this guy is (n_events, 2,  n_sims)
-    severity_stacked = np.stack([severity_array, severity_squared], axis=1)
+    severity_stacked = np.stack([severity_array], axis=1)
 
     # Do the dot product
     preds = np.einsum("ijk,jk->ik", severity_stacked, coefs.T)
@@ -496,7 +499,7 @@ def calculate_benefits(
         **kwargs,
     )
 
-    # Trasnform to a pandas dataframe and merge with the benefits
+    # Transform to a pandas dataframe and merge with the benefits
     costs_df = pd.DataFrame(costs.T)
     costs_df.index = new_data.year
 
@@ -599,7 +602,7 @@ def calculate_benefits(
 def simulation_data(
     template: str | pd.DataFrame,
     land_type: str | pd.DataFrame,
-    roads: list | pd.DataFrame,
+    roads: list | pd.DataFrame | None = None,
     only_roads: bool = True,
     buf: int = 4_000,
     road_type: str | None = "secondary",
@@ -705,7 +708,7 @@ def sample_rx_years(
     template : Union[str, gpd.GeoDataFrame]
         A GeoDataFrame with the template data or a string path to the template data.
     treat_data : pd.DataFrame
-        A DataFrame with the treatment data.
+        A DataFrame with the treatment data. This is Rx!
     fire_data : pd.DataFrame
         A DataFrame with the MTBS treatment data.
     estimates : Union[pd.DataFrame, str]
@@ -776,6 +779,9 @@ def sample_rx_years(
 
     # Create weight for sampling. We want to downweight to sample units w/
     # fires in that year
+
+    # This is fishy! why i am removing all the fires in all the years! This
+    # should be only for first year!
     template = template[template.Event_ID.isin([np.nan, "nodata"])]
 
     # If spillovers, we need to buffer the points and get all the pixels that
