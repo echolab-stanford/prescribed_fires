@@ -7,7 +7,6 @@ scikit-learn
 scipy
 statsmodels
 geopandas
-gdal
 rasterio
 xarray[complete]
 xarray-spatial
