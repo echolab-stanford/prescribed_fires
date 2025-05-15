@@ -1,6 +1,6 @@
 local_data: /home/users/ihigueme/projects/prescribed_fires/data
 root_path: /oak/stanford/groups/mburke/prescribed_data
 processed: ${data.root_path}/processed
-raw: ${root_path}/raw
-save_path: ${root_path}/results
-geoms: ${root_path}/geoms
+raw: ${.root_path}/raw
+save_path: ${.root_path}/results
+geoms: ${.root_path}/geoms
