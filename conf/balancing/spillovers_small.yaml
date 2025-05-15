@@ -1,0 +1,13 @@
+treats_long: "${compute.processed}/distance_treatments_small/wildfire_distances_20000.feather"
+dict_paths:
+  frp: ${compute.processed}/frp/frp_wide.feather
+  disturbances: ${compute.processed}/disturbances/disturbances_wide.feather
+  dem: ${compute.processed}/dem/dem.feather
+  land_type: ${compute.processed}/land_type/land_type.feather
+  prism: ${compute.processed}/prism/prism_processed_wide.feather
+  vegetation: ${compute.processed}/vegetation/frac_vegetation_wide.feather
+distance_treatment: 5000
+focal_year: 2020
+row_id: "grid_id"
+intercept: true
+save_path: ${compute.save_path}/mtbs_spillovers_small
