@@ -1,5 +1,5 @@
 pop_raster_path: ${compute.raw}/population
-save_path:  ${compute.save_path}/distances_treatments_small
+save_path:  ${compute.processed}/distance_treatments_small
 pop_threshold: 0.5
 size_threshold: 2000
 pop_buffer:

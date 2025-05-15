@@ -10,4 +10,4 @@ distance_treatment: 5000
 focal_year: 2020
 row_id: "grid_id"
 intercept: true
-save_path: ${compute.results}/mtbs_spillovers
+save_path: ${compute.save_path}/mtbs_spillovers
