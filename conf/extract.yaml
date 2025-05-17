@@ -1,12 +1,6 @@
-root_path: "/mnt/sherlock/oak/prescribed_data"
-save_path: "${root_path}/processed"
-data_path: "${root_path}/raw"
-template: "${root_path}/geoms/templates/template.tif"
-shape_mask: "${root_path}/geoms/california_geom/datacalifornia_geom.shp"
-
 extract:
   frp:
-    path: "${data_path}/modis/fire_archive_M-C61_403638.csv"
+    path: "${compute.raw}/modis/fire_archive_M-C61_403638.csv"
     save_path: "${save_path}/frp"
     confidence: 30
     wide: true
@@ -19,36 +13,36 @@ extract:
     - vpdmax
     - ppt
     - tmean
-    path: "${data_path}/prism"
-    save_path: "${save_path}/prism"
+    path: "${compute.raw}/prism"
+    save_path: "${compute.processed}/prism"
     feather: true
     wide: true
   dnbr:
-    path: "${data_path}/dnbr/dnbr_gee_inmediate/"
-    save_path: "${save_path}/dnbr_gee_inmediate/"
+    path: "${compute.raw}/dnbr/dnbr_gee_inmediate/"
+    save_path: "${compute.processed}/dnbr_gee_inmediate/"
     feather: true
     overwrite: false
     classes: false
   emissions:
-    path: "${data_path}/emissions/emission_CA"
-    save_path: "${save_path}/emissions_pm25"
+    path: "${compute.raw}/emissions/emission_CA"
+    save_path: "${compute.processed}/emissions_pm25"
     feather: true
     extract_band: PM2.5
     overwrite: false
   disturbances:
-    path: "${data_path}/disturbances"
-    save_path: "${save_path}/disturbances"
+    path: "${compute.raw}/disturbances"
+    save_path: "${compute.processed}/disturbances"
     wide: true
   dem:
-   path: "${data_path}/dem/elevation_1KMmn_GMTEDmn.tif"
-   save_path: "${save_path}/dem"
+   path: "${compute.raw}/dem/elevation_1KMmn_GMTEDmn.tif"
+   save_path: "${compute.processed}/dem"
    feather: true
   land_type:
-    path: "${data_path}/US_105_EVT/Tif/us_105evt_physio.tif"
-    save_path: "${save_path}/land_type"
+    path: "${compute.raw}/US_105_EVT/Tif/us_105evt_physio.tif"
+    save_path: "${compute.processed}/land_type"
   frac_veg:
-    path: "${data_path}/vegetation"
-    save_path: "${save_path}/vegetation"
+    path: "${compute.raw}/vegetation"
+    save_path: "${compute.processed}/vegetation"
     feather: true
     wide: true
     clean: false

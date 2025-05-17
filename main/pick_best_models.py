@@ -32,7 +32,9 @@ def walk_the_runway(path_to_db, save_path):
     ).to_df()
 
     log.info(f"Saving to {os.path.join(save_path, 'best_model_loss.csv')}")
-    best_model_loss.to_csv(os.path.join(save_path, "best_model_loss.csv"), index=False)
+    best_model_loss.to_csv(
+        os.path.join(save_path, "best_model_loss.csv"), index=False
+    )
 
     best_model_asmd = duckdb.query(
         f"""
@@ -55,7 +57,9 @@ def walk_the_runway(path_to_db, save_path):
     ).to_df()
 
     log.info(f"Saving to {os.path.join(save_path, 'best_model_asmd.csv')}")
-    best_model_asmd.to_csv(os.path.join(save_path, "best_model_asmd.csv"), index=False)
+    best_model_asmd.to_csv(
+        os.path.join(save_path, "best_model_asmd.csv"), index=False
+    )
 
     # Save all stadarized differences for the best model (loss and asmd)
     std_diffs_loss = duckdb.query(
@@ -92,7 +96,9 @@ def walk_the_runway(path_to_db, save_path):
     """
     ).to_df()
 
-    weights.to_csv(os.path.join(save_path, "best_model_loss_weights.csv"), index=False)
+    weights.to_csv(
+        os.path.join(save_path, "best_model_loss_weights.csv"), index=False
+    )
 
     weights = duckdb.query(
         f"""
@@ -102,12 +108,14 @@ def walk_the_runway(path_to_db, save_path):
     """
     ).to_df()
 
-    weights.to_csv(os.path.join(save_path, "best_model_asmd_weights.csv"), index=False)
+    weights.to_csv(
+        os.path.join(save_path, "best_model_asmd_weights.csv"), index=False
+    )
 
     return None
 
 
-@hydra.main(version_base=None, config_path="../conf")
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
 def run_tyra(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
     for key, path in cfg.tyra.path_results.items():

@@ -17,7 +17,7 @@ from prescribed.extract.process_nvdi import process_vegetation
 log = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="../conf", config_name="extract")
+@hydra.main(config_path="../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
@@ -28,8 +28,8 @@ def main(cfg: DictConfig) -> None:
         log.info("Processing DEM")
         process_dem(
             dem_path=cfg.extract.dem.path,
-            shape_mask=cfg.shape_mask,
-            template=cfg.template,
+            shape_mask=cfg.data.mask,
+            template=cfg.data.template,
             save_path=cfg.extract.dem.save_path,
             feather=cfg.extract.dem.feather,
         )
@@ -39,9 +39,9 @@ def main(cfg: DictConfig) -> None:
         log.info("Processing disturbances")
         process_disturbances(
             disturbances_path=cfg.extract.disturbances.path,
-            template_path=cfg.template,
+            template_path=cfg.data.template,
             save_path=cfg.extract.disturbances.save_path,
-            shape_mask=cfg.shape_mask,
+            shape_mask=cfg.data.mask,
             clean=True,
             feather=cfg.extract.disturbances.feather,
             wide=cfg.extract.disturbances.wide,
@@ -54,8 +54,8 @@ def main(cfg: DictConfig) -> None:
             variables=cfg.extract.prism.variables,
             path_prism_data=cfg.extract.prism.path,
             save_path=cfg.extract.prism.save_path,
-            mask_shape=cfg.shape_mask,
-            template=cfg.template,
+            mask_shape=cfg.data.mask,
+            template=cfg.data.template,
             feather=cfg.extract.prism.feather,
             wide=cfg.extract.prism.wide,
         )
@@ -66,8 +66,8 @@ def main(cfg: DictConfig) -> None:
         process_modis_file(
             file_path=cfg.extract.frp.path,
             save_path=cfg.extract.frp.save_path,
-            aoi=cfg.shape_mask,
-            template_path=cfg.template,
+            aoi=cfg.data.mask,
+            template_path=cfg.data.template,
             confidence=cfg.extract.frp.confidence,
             wide=cfg.extract.frp.wide,
         )
@@ -77,7 +77,7 @@ def main(cfg: DictConfig) -> None:
         log.info("Processing DNBR")
         process_dnbr(
             dnbr_path=cfg.extract.dnbr.path,
-            template_path=cfg.template,
+            template_path=cfg.data.template,
             save_path=cfg.extract.dnbr.save_path,
             feather=cfg.extract.dnbr.feather,
             overwrite=cfg.extract.dnbr.overwrite,
@@ -89,7 +89,7 @@ def main(cfg: DictConfig) -> None:
         log.info("Processing land type")
         process_land_type(
             path=cfg.extract.land_type.path,
-            template_path=cfg.template,
+            template_path=cfg.data.template,
             save_path=cfg.extract.land_type.save_path,
         )
 
@@ -97,7 +97,7 @@ def main(cfg: DictConfig) -> None:
         log.info("Processing emissions")
         process_emissions(
             emissions_path=cfg.extract.emissions.path,
-            template_path=cfg.template,
+            template_path=cfg.data.template,
             save_path=cfg.extract.emissions.save_path,
             extract_band=cfg.extract.emissions.extract_band,
             feather=cfg.extract.emissions.feather,
@@ -107,8 +107,8 @@ def main(cfg: DictConfig) -> None:
     if "frac_veg" in data_extract:
         process_vegetation(
             files_path=cfg.extract.frac_veg.path,
-            template_path=cfg.template,
-            shape_mask=cfg.shape_mask,
+            template_path=cfg.data.template,
+            shape_mask=cfg.data.mask,
             save_path=cfg.extract.frac_veg.save_path,
             feather=cfg.extract.frac_veg.feather,
             wide=cfg.extract.frac_veg.wide,
