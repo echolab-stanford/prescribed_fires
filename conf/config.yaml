@@ -6,8 +6,9 @@ defaults:
   - build: mtbs
   - optim: small_grid
   - tyra: mtbs_treats
+  - simulations: spillovers
 
-config: "EPSG:3310"
+epsg: "EPSG:3310"
 
 hydra:
   run:

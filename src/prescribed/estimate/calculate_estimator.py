@@ -61,6 +61,14 @@ def calculate_estimator(
     pd.DataFrame
         A dataframe with the estimator for each of the lagged years
     """
+
+    # Define the calculate_weighted_stats function within the scope of this function
+    def calculate_weighted_stats(y, w):
+        mu = np.average(y, weights=w)
+        var = np.sum(w**2 * (y - mu) ** 2) / np.sum(w) ** 2
+        ctr_sum = np.sum(w)
+        return mu, var, ctr_sum
+
     # Column names stubs on the default treatment dataset
     column_names = ["treat", "class_dnbr", "class_frp"]
 
@@ -133,6 +141,22 @@ def calculate_estimator(
             # Rename grouped var to something more meaningful
             treat_means_df.rename(
                 columns={outcome_var: "treat_mean"}, inplace=True
+            )
+
+            # Calculate variance via m-estimation. To do this we need to calculate
+            # some numbers first.
+
+            # Get treatments stats
+            treat_means_df = (
+                outcomes_year.groupby("year", as_index=False)[outcome_var]
+                .agg(["mean", "var", "count"])
+                .rename(
+                    columns={
+                        "mean": "treat_mean",
+                        "var": "treat_var",
+                        "count": "n_treat",
+                    }
+                )
             )
 
         elif outcomes == "rr":
@@ -245,6 +269,24 @@ def calculate_estimator(
                     columns={None: "control_mean"}, inplace=True
                 )
 
+                # Calculate the variance in the control group
+                weighted_outcomes = (
+                    outcomes_control.groupby("year")
+                    .apply(
+                        lambda df: pd.Series(
+                            calculate_weighted_stats(
+                                df[outcome_var].values, df["weights"].values
+                            ),
+                            index=[
+                                "control_mean",
+                                "control_var",
+                                "control_count",
+                            ],
+                        )
+                    )
+                    .reset_index()
+                )
+
             elif outcomes == "rr":
                 # To build the RR estimator denominator we do not need an outcome
                 # Just like in the treatment, we want to track the control group
@@ -337,6 +379,10 @@ def calculate_estimator(
                 estimator["att"] = (
                     estimator["treat_mean"] - estimator["control_mean"]
                 )
+                estimator["att_var"] = (
+                    estimator["treat_var"] + estimator["control_var"]
+                ) / estimator["n_treat"] ** 2
+                estimator["att_se"] = np.sqrt(estimator["att_var"])
             else:
                 # Calculate the RR estimator
                 estimator["att"] = (
@@ -412,6 +458,13 @@ def calculate_spillover_estimator(
         A dataframe with the estimator for each of the lagged years
     """
 
+    # Define the calculate_weighted_stats function within the scope of this function
+    def calculate_weighted_stats(y, w):
+        mu = np.average(y, weights=w)
+        var = np.sum(w**2 * (y - mu) ** 2) / np.sum(w) ** 2
+        ctr_sum = np.sum(w)
+        return mu, var, ctr_sum
+
     if estimator not in ["att", "rr"]:
         raise ValueError(
             "Invalid estimator. Available options are 'att' or 'rr'"
@@ -462,25 +515,56 @@ def calculate_spillover_estimator(
                 columns={"weights": "control_mean"}, inplace=True
             )
 
-            # Calculate the estimator and add some additional columns
+            # Calculate the estimator and add some additional columns. We
+            # call it `att` despite being a RR estimator, as this is the
+            # convention we use in the rest of the code.
             est_df = fire_treat_counts.merge(fire_control_counts, on="year")
             est_df["att"] = est_df["treat_mean"] / est_df["control_mean"]
             est_df["focal_year"] = focal_year
             est_df["lag"] = est_df["year"] - focal_year
 
         else:
-            # Calculate fire counts in controls as a weighted mean
-            fire_control_counts = fire_data_controls.groupby(
-                "year", as_index=False
-            ).apply(lambda df: np.average(df[dep_var], weights=df["weights"]))
+            # Calculate variance via m-estimation. To do this we need to calculate
+            # some numbers first.
 
-            fire_control_counts.columns = ["year", "control_mean"]
+            # Get treatments stats
+            fire_data_agg = (
+                fire_data_treats.groupby("year", as_index=False)[dep_var]
+                .agg(["mean", "var", "count"])
+                .rename(
+                    columns={
+                        "mean": "treat_mean",
+                        "var": "treat_var",
+                        "count": "n_treat",
+                    }
+                )
+            )
+
+            # Calculate the variance in the control group
+            fire_control_counts = (
+                fire_data_controls.groupby("year")
+                .apply(
+                    lambda df: pd.Series(
+                        calculate_weighted_stats(
+                            df[dep_var].values, df["weights"].values
+                        ),
+                        index=["control_mean", "control_var", "control_count"],
+                    )
+                )
+                .reset_index()
+            )
 
             # Calculate the estimator and add some additional columns
-            est_df = fire_treat_counts.merge(fire_control_counts, on="year")
+            est_df = fire_data_agg.merge(fire_control_counts, on="year")
             est_df["att"] = est_df["treat_mean"] - est_df["control_mean"]
             est_df["focal_year"] = focal_year
             est_df["lag"] = est_df["year"] - focal_year
+
+            # M-estimation (influence function) standard error
+            est_df["att_var"] = (
+                est_df["treat_var"] + est_df["control_var"]
+            ) / est_df["n_treat"] ** 2
+            est_df["att_se"] = np.sqrt(est_df["att_var"])
 
         list_estimates.append(est_df)
 
@@ -504,10 +588,12 @@ def pooling_estimates(
     year_range: list | None = range(2009, 2023),
     cluster_var: str = "year",
     freq_weights: str | None = None,
+    weight_var: str | None = None,
 ) -> pd.DataFrame:
     """Calculate variance/ses for pooled estimators
 
-    This function pools the estimates to calculate the variance of the relationship between the ATTs and the lags. To do this we will use a simple OLS fit and to estimate the variance just use a LOO (leave-one-out) approach as a response of the SC design (i.e. control and treatment groups can have overlaps over time in consecutive years). This function will take results from the `calculate_estimator` (and actually be inside this function if the user want SEs), thus the input should be the output of the `calculate_estimator` function.
+    This function pools the estimates to calculate the variance of the relationship between the
+    estimators and the lags. To do this we will use a simple OLS fit and to estimate the variance just use a LOO (leave-one-out) approach as a response of the SC design (i.e. control and treatment groups can have overlaps over time in consecutive years). This function will take results from the `calculate_estimator` (and actually be inside this function if the user want SEs), thus the input should be the output of the `calculate_estimator` function.
 
     Parameters
     ----------
@@ -557,7 +643,11 @@ def pooling_estimates(
 
         coefs_all_years = intercept + lags * slope
     else:
-        model_all_years = smf.ols(formula=formula, data=df)
+        model_all_years = smf.wls(
+            formula=formula,
+            data=df,
+            weights=1 / (df[weight_var]) if weight_var is not None else None,
+        )
 
         result_all_years = model_all_years.fit()
         coefs_all_years = result_all_years.predict(
@@ -588,9 +678,13 @@ def pooling_estimates(
                 preds = intercept + lags * slope
 
             else:
-                model = smf.ols(
+                model = smf.wls(
                     formula=formula,
                     data=df[df[cluster_var].isin(jk_sample)],
+                    weights=1
+                    / (df[df[cluster_var].isin(jk_sample)][weight_var])
+                    if weight_var is not None
+                    else None,
                 )
                 result = model.fit()
                 lag_df = pd.DataFrame({"lag": lags})
@@ -603,15 +697,15 @@ def pooling_estimates(
 
     # Calculate the standard errors for each jk sample
     ses = np.apply_along_axis(
-        lambda x: np.sqrt(np.var(x, ddof=1) * (x.size - 1) ** 2 / x.size),
+        lambda x: np.sqrt((np.var(x, ddof=1) * (x.size - 1) ** 2) / x.size),
         0,
         arr,
     )
 
     # Calculate the CIs
     low_ci, high_ci = (
-        coefs_all_years - 1.96 * ses,
-        coefs_all_years + 1.96 * ses,
+        coefs_all_years - (1.96 * ses),
+        coefs_all_years + (1.96 * ses),
     )
 
     # Return the results as a dataframe

@@ -3,9 +3,10 @@ template: ${compute.geoms}/templates/template.tif
 mask: ${compute.geoms}/california_geom/datacalifornia_geom.shp
 mtbs: ${compute.geoms}/mtbs_perims_DD_updated/mtbs_perims_DD.shp
 
-land_type: ${compute.save_path}/land_type/land_type.feather
-fire_compute: ${compute.processed}/treatments_mtbs.feather
+land_type: ${compute.processed}/land_type/land_type.feather
+fire_treatments: ${compute.processed}/treatments_mtbs.feather
+roads: ${compute.raw}/os_roads_ca
 
-att_results: ${compute.local_data}/results/att_conifers_dnbr.csv
-spillover_att_results: ${compute.local_data}/results/att_spillover.csv
-sims_save_path: ${compute.save_path}/simulations/policy_spill_large
+att_results: ${compute.local_data}/results/att_conifers_dnbr_inmediate_new.csv
+spillover_att_results: ${compute.local_data}/results/att_spillover_new.csv
+sims_save_path: ${compute.save_path}/simulations/policy_spill_large_new

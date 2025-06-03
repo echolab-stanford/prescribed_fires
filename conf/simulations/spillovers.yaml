@@ -1,0 +1,26 @@
+
+only_roads: false
+buf: 10000
+road_type: "secondary"
+land_type: 
+ - 2
+start_year: 2010
+treatment_sizes:
+- 100
+- 500
+- 1000
+- 2000
+num_sims: 1000
+step_save: 10
+size_treatment: 1000
+format: "parquet"
+spillovers: true
+spillover_size: 1000
+template_years: [2000, 2022]
+
+dist_treat: 1000
+year_limit: 6
+
+land_type_mapping:
+conifers: 2.0
+shrublands: 12.0

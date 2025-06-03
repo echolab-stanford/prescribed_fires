@@ -27,7 +27,7 @@ def classify_dnbr(
         (df[dnbr] >= 100) & (df[dnbr] < 270),
         (df[dnbr] >= 270) & (df[dnbr] < 440),
         (df[dnbr] >= 440) & (df[dnbr] < 660),
-        df[dnbr] >= 660,
+        (df[dnbr] >= 660),
     ]
     # zero-index to match the low-intensity level to be 1.
     choices = [0, 1, 2, 3, 4]

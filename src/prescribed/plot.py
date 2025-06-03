@@ -402,18 +402,6 @@ def plot_outcomes(
                     "focal_year is not in the dataframe. Maybe you want to pass pooled=True"
                 )
 
-            # sns.scatterplot(
-            #     x=time_var,
-            #     y=var_interest,
-            #     data=df[(df[time_var] >= 0) & (df["focal_year"] <= 2021)],
-            #     hue="focal_year",
-            #     palette=cmap,
-            #     size="control_count",
-            #     ax=ax,
-            #     alpha=0.5,
-            #     legend=True,
-            # )
-
             df[(df[time_var] >= 0) & (df["focal_year"] <= 2021)].plot.scatter(
                 x=time_var,
                 y=var_interest,
@@ -421,6 +409,7 @@ def plot_outcomes(
                 cmap=cmap,
                 ax=ax,
                 alpha=0.5,
+                sizes=(20, 400),
                 s=size if size else None,
                 colorbar=False,
             )
