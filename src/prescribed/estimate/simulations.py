@@ -811,7 +811,6 @@ def sample_rx_years(
 
         # Clean df and remove all the grids that were sampled before
         df = df[~df.grid_id.isin(sample_grids)]
-
         sample = df.sample(
             n=sample_n,
             axis=0,
@@ -824,7 +823,10 @@ def sample_rx_years(
             spill = sample.copy()
             spill["geometry"] = spill.buffer(spillover_size, cap_style="square")
             spill = (
-                template[template.year == g_idx]
+                template[
+                    (template.year == g_idx)
+                    & (~template.grid_id.isin(sample_grids))
+                ]
                 .drop(
                     columns=[
                         "lat",

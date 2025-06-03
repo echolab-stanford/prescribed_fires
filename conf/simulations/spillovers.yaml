@@ -6,9 +6,9 @@ land_type:
  - 2
 start_year: 2010
 treatment_sizes:
-- 100
 - 500
 - 1000
+- 1500
 - 2000
 num_sims: 1000
 step_save: 10
