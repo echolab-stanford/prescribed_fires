@@ -21,53 +21,52 @@ def main(cfg: DictConfig):
     sim_data = simulation_data(
         template=cfg.data.template,
         land_type=cfg.data.land_type,
-        roads=cfg.data.roads,
-        only_roads=cfg.simulation.only_roads,
-        buf=cfg.simulation.buf,
-        road_type=cfg.simulation.road_type,
     )
 
     # Load template and fire data
     template = prepare_template(cfg.data.template)
-    mtbs = gpd.read_file(cfg.data.mtbs).to_crs(cfg.data.crs)
+    mtbs = gpd.read_file(cfg.data.mtbs).to_crs(cfg.epsg)
 
     # Merge it to get years
     mtbs["year"] = mtbs.Ig_Date.dt.year
 
     # Prepare results
     results = pd.read_csv(cfg.data.att_results)
-    results["land_type"] = results.land_type.replace(cfg.land_type_mapping)
+    results["land_type"] = 2.0  # This is a bit hardcoded
+    results["land_type"] = results.land_type.replace(
+        cfg.simulations.land_type_mapping
+    )
 
     spillover_results = pd.read_csv(cfg.data.spillover_att_results)
     spillover_results = (
         spillover_results[
-            spillover_results.dist_treat == cfg.spillover.dist_treat
+            spillover_results.dist_treat == cfg.simulations.dist_treat
         ]
         .drop(columns="dist_treat", errors="ignore")
         .sort_values("year")
     )
 
-    if cfg.spillover.year_limit:
+    if cfg.simulations.year_limit is not None:
         spillover_results = spillover_results[
-            spillover_results.year <= cfg.spillover.year_limit
+            spillover_results.year <= cfg.simulations.year_limit
         ]
 
-    sim_data = sim_data[sim_data.land_type.isin(cfg.simulation.land_types)]
+    sim_data = sim_data[sim_data.land_type.isin(cfg.simulations.land_type)]
 
     # Prepare fire data
-    fire_data = pd.read_feather(cfg.data.fire_data).drop(
+    fire_data = pd.read_feather(cfg.data.fire_treatments).drop(
         columns=["spatial_ref"], errors="ignore"
     )
-    fire_data = fire_data[fire_data.year >= cfg.simulation.start_year]
+    fire_data = fire_data[fire_data.year >= cfg.simulations.start_year]
 
     # Prepare template
     template = prepare_template(
-        cfg.data.template, years=cfg.simulation.template_years
+        cfg.data.template, years=cfg.simulations.template_years
     )
-    template = template[template.year >= cfg.simulation.start_year]
+    template = template[template.year >= cfg.simulations.start_year]
 
     # Iterate over size of treatments
-    for i in cfg.simulation.treatment_sizes:
+    for i in cfg.simulations.treatment_sizes:
         log.info(f"Running simulations for {i} size treatment")
         run_simulations(
             template=template,
@@ -75,15 +74,15 @@ def main(cfg: DictConfig):
             results=results,
             fire_data=fire_data,
             save_path=f"{cfg.data.sims_save_path}_{i}",
-            num_sims=cfg.simulation.num_sims,
-            step_save=cfg.simulation.step_save,
-            size_treatment=cfg.simulation.size_treatment,
-            start_year=cfg.simulation.start_year,
+            num_sims=cfg.simulations.num_sims,
+            step_save=cfg.simulations.step_save,
+            size_treatment=cfg.simulations.size_treatment,
+            start_year=cfg.simulations.start_year,
             sample_n=i,
-            crs=cfg.data.crs,
-            format=cfg.simulation.format,
-            spillovers=cfg.simulation.spillovers,
-            spillover_size=cfg.simulation.spillover_size,
+            crs=cfg.epsg,
+            format=cfg.simulations.format,
+            spillovers=cfg.simulations.spillovers,
+            spillover_size=cfg.simulations.spillover_size,
             spillover_estimates=spillover_results,
         )
 

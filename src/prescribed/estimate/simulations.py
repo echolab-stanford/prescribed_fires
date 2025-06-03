@@ -41,6 +41,12 @@ def make_model(
         Number of bootstrap samples, by default 999
     mask : str, optional
         Mask to filter coefficients, by default "sum_severity"
+    predict : bool, optional
+        Whether to predict using the model, by default False
+    new_data : pd.DataFrame, optional
+        New data to use for predictions, by default None
+    weights : pd.Series, optional
+        Weights to use in the model, by default None
 
     Returns
     -------
@@ -239,7 +245,7 @@ def calculate_benefits(
     average_treats : bool, optional
         Whether to average the treatments, by default False.
     **kwargs
-        Additional keyword arguments.
+        Additional keyword arguments to the `make_model` function.
 
     Returns
     -------
@@ -465,9 +471,6 @@ def calculate_benefits(
         simulation_data["preds_pm"] - simulation_data["preds_sim_pm"]
     )
 
-    # # Remove when benefits are negative
-    # simulation_data = simulation_data[simulation_data.benefit >= 0]
-
     # Calculate the total benefits for each year, sim (aggregate to the State
     # level)s
     benefits = simulation_data.groupby(
@@ -480,15 +483,18 @@ def calculate_benefits(
     # `make_predictions` function).
     total_years = benefits.year_treat.unique().shape[0]
 
+    # Generate random severity for each n_treats so we add some random uncertainty
+    # to the costs.
+    treat_severity = np.random.randint(0, treat_severity, size=n_treats)
     new_data = pd.DataFrame(
         {
             "sum_severity": np.repeat(
-                np.array(np.array([treat_severity] * n_treats).sum()),
+                treat_severity.sum(),
                 total_years,
             ),
             "year": benefits.year_treat.unique(),
-            "total_pixels": np.repeat(np.array([n_treats]), total_years),
-            "total_days": np.repeat(np.array([8]), total_years),
+            "total_pixels": 0,
+            "total_days": 0,
         }
     )
 
@@ -498,6 +504,9 @@ def calculate_benefits(
         k=df.sim.max(),
         **kwargs,
     )
+
+    # if costs are negative, just set them to 1
+    costs[costs < 0] = np.mean(costs[costs > 0])
 
     # Transform to a pandas dataframe and merge with the benefits
     costs_df = pd.DataFrame(costs.T)
@@ -603,7 +612,7 @@ def simulation_data(
     template: str | pd.DataFrame,
     land_type: str | pd.DataFrame,
     roads: list | pd.DataFrame | None = None,
-    only_roads: bool = True,
+    only_roads: bool = False,
     buf: int = 4_000,
     road_type: str | None = "secondary",
     crs: str = "EPSG:3310",
@@ -684,13 +693,13 @@ def sample_rx_years(
     treat_data: pd.DataFrame,
     fire_data: pd.DataFrame,
     estimates: pd.DataFrame | str,
-    size_treatment: Optional[int] = None,
     spillovers: bool = False,
     spillover_size: Optional[int] = 1000,
     spillover_estimates: Optional[pd.DataFrame] = None,
     start_year: int = 2010,
     sample_n: int = 100,
     crs: str = "EPSG:3310",
+    size_treatment: Optional[int] = 1000,
 ) -> pd.DataFrame:
     """
     Sample years for Rx fires.
@@ -777,13 +786,6 @@ def sample_rx_years(
     # Subset for the years we are interested in the treatment data
     template = template[template.year >= start_year]
 
-    # Create weight for sampling. We want to downweight to sample units w/
-    # fires in that year
-
-    # This is fishy! why i am removing all the fires in all the years! This
-    # should be only for first year!
-    template = template[template.Event_ID.isin([np.nan, "nodata"])]
-
     # If spillovers, we need to buffer the points and get all the pixels that
     # are within that buffer
     if spillovers:
@@ -803,8 +805,13 @@ def sample_rx_years(
         total=template.year.nunique(),
         leave=False,
     ):
+        # Remove the grids that have a fire in the year under the assumption
+        # those pixels are not available for Rx fire treatments
+        df = df[df.Event_ID.isin([np.nan, "nodata"])]
+
         # Clean df and remove all the grids that were sampled before
         df = df[~df.grid_id.isin(sample_grids)]
+
         sample = df.sample(
             n=sample_n,
             axis=0,
@@ -994,7 +1001,7 @@ def run_simulations(
 
     # Run all the simulations and save for each group
     for group_sims in tqdm(
-        grouper(range(1, num_sims), step_save),
+        grouper(range(1, num_sims + 1), step_save),
         total=int(num_sims / step_save),
         desc="Grouping simulations",
     ):
