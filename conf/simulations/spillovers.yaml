@@ -16,7 +16,7 @@ size_treatment: 1000
 format: "parquet"
 spillovers: true
 spillover_size: 1000
-template_years: [2000, 2022]
+template_years: [2000, 2021]
 
 dist_treat: 1000
 year_limit: 6
