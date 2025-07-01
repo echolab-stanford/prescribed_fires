@@ -183,14 +183,13 @@ def make_predictions_bootstrap(
 
     # Store index for later and transform to numpy array
     index = severity_array.index
-    severity_array = severity_array.to_numpy()
+    severity_array = severity_array.to_numpy()  # (n_events, n_sims)
 
     # To do: for now the quadratic transformation is not implemented and we're
-    # just hardcoding stuff and make it work assuming we always have a quadratic
+    # just hardcoding stuff and make it work assuming we always have a linear
     # transformation. np.vander doesn't play well with > 1-D arrays.
-    # severity_squared = severity_array**2
 
-    # Now this guy is (n_events, 2,  n_sims)
+    # Now this guy is (n_events, 1, n_sims)
     severity_stacked = np.stack([severity_array], axis=1)
 
     # Do the dot product
@@ -278,6 +277,8 @@ def calculate_benefits(
     else:
         path_db = f"../data/policy_no_spill_{n_treats}"
 
+    # Aggregate the dNBR data at the event level to collect the total severity
+    # of each event. Events are indexed by id (event_id) and year.
     dnbr_data = duckdb.query("""
     with dnbr_data as (
     select 
@@ -297,12 +298,20 @@ def calculate_benefits(
     group by event_id, event_name, year
     """).to_df()
 
+    # Take all the simulations (sim) and concatenate them to calculate the total
+    # reduction in severity on each of the scenarios. Be aware that this query
+    # will contain only the instances where the simulations meet the observed
+    # data
     df = duckdb.query(f"""
+    -- Concatenate all the simulations from a path
     WITH simulation_data AS (
         SELECT *
         FROM '{path_db}/*.parquet'
         where sim is not null
     ), 
+
+    -- Load dNBR data and care to all the years after the start of the treatment
+    
     dnbr_data AS (
     select 
             grid_id, 
@@ -313,6 +322,10 @@ def calculate_benefits(
     from '../data/dnbr.parquet' 
     where year > 2010
     ), 
+
+    -- Do the aggregation of the severity by event and year (they are the same
+    -- each event_id is unique and the year is the year of the event)
+    
     dnbr_event_agg as (
     select event_id, 
         event_name,      
@@ -321,6 +334,15 @@ def calculate_benefits(
     from dnbr_data
     group by event_id, event_name, year
     ), 
+
+    -- Merge dNBR with simulations so we can calculate the benefits of the
+    -- treatment at the grid level. These benefits will have all the changes in 
+    -- severity for each event and treatment year (year_treat). So we can have 
+    -- CASTLE fire repeated for each year_treat and simulation run (sim). We
+    -- call the change in dNBR `sim_benefit`. Notice the rows in this table
+    -- will be the ones that have both fire and treatment, so you will notice a 
+    -- reduction compared to simulation_data
+
     benefits_grid_simulation as (
     SELECT  s.grid_id, 
             s.year_treat, 
@@ -337,8 +359,14 @@ def calculate_benefits(
     from simulation_data s 
     inner join dnbr_data d
     on s.grid_id = d.grid_id 
-        and s.year = d.year
-    ), 
+    and s.year = d.year
+    ),
+
+    -- Aggregate the benefits by each event and year. We do this aggregation to
+    -- calculate the contribution of each year_treat to the total benefits. So 
+    -- for each event_id we sum the simulated severity at the grid level for each
+    -- of the treated years. We will have these for each simulation run (sim).
+
     benefits_event_agg as (
     select event_id,
         year,
@@ -349,6 +377,13 @@ def calculate_benefits(
     from benefits_grid_simulation
     group by event_id, year, event_name, year_treat, sim
     ),
+
+    -- Now we want to calculate the total benefit per each treat year. This is 
+    -- the change in severity compared to the observed severity. In the other 
+    -- CTEs we calculatedthe change in dNBR! Now, we want to calculate the 
+    -- treatment event summed severity for each event and year_treat and 
+    -- simulation run (sim). 
+
     total_event_benefits as (
     select d.event_id,
         d.event_name,
@@ -383,6 +418,7 @@ def calculate_benefits(
     # fire happened. Thus, all MTBS events are not covered here. We want to have
     # all the events and have the counterfactual and the observed data together
     # with all the simulation runs. `df_sims` is a dataframe with all the combos
+    # of simulations and `year_treat` (years we applied treatments).
     df_sims = (
         df[["year_treat", "sim"]]
         .drop_duplicates()
@@ -390,6 +426,9 @@ def calculate_benefits(
         .reset_index(drop=True)
     )
 
+    # Create a cross join with the dnbr data to have all the combinations of
+    # events, years and simulations. This will allow us to have the counterfactual
+    # and the observed data together with all the simulation runs.
     dnbr_data_cross = dnbr_data.merge(df_sims, how="cross")
 
     # We need to make sure that we don't have any contamination. This should be
@@ -466,13 +505,13 @@ def calculate_benefits(
         ) * 100
         warnings.warn(f"{prop:.4f}% of rows were removed")
 
-    # Calculate benefits for each simulation
+    # Calculate benefits for each simulation and event
     simulation_data["benefit"] = (
         simulation_data["preds_pm"] - simulation_data["preds_sim_pm"]
     )
 
     # Calculate the total benefits for each year, sim (aggregate to the State
-    # level)s
+    # level)
     benefits = simulation_data.groupby(
         ["year", "year_treat", "sim"], as_index=False
     )["benefit"].sum()
@@ -485,35 +524,27 @@ def calculate_benefits(
 
     # Generate random severity for each n_treats so we add some random uncertainty
     # to the costs.
-    treat_severity = np.random.randint(0, treat_severity, size=n_treats)
-    new_data = pd.DataFrame(
-        {
-            "sum_severity": np.repeat(
-                treat_severity.sum(),
-                total_years,
-            ),
-            "year": benefits.year_treat.unique(),
-            "total_pixels": 0,
-            "total_days": 0,
-        }
-    )
+    treat_severity = np.random.randint(
+        0, treat_severity, size=n_treats * df.sim.max() * total_years
+    ).reshape(n_treats, df.sim.max(), total_years)
+    # This will be (number_treatments, number_simulations, treatment_years)
 
-    # Get predictions for each sim index and treatment year
-    costs = make_model(
-        new_data=new_data,
-        k=df.sim.max(),
-        **kwargs,
-    )
+    # Calculate the dot product and the coefficients we previously used for the
+    # smoke predictions
+    cost_emissions = np.einsum("ijk,jr->ijk", treat_severity, coefs)
 
-    # if costs are negative, just set them to 1
-    costs[costs < 0] = np.mean(costs[costs > 0])
+    # Add all the treatment emissions together to get the total emissions per
+    # treaatment year
+    cost_emissions_sum_year = cost_emissions.sum(
+        axis=0
+    )  # (number_simulations, number_treatments)
 
     # Transform to a pandas dataframe and merge with the benefits
-    costs_df = pd.DataFrame(costs.T)
-    costs_df.index = new_data.year
+    costs_df = pd.DataFrame(cost_emissions_sum_year.T)
+    costs_df.index = benefits.year_treat.unique()
 
     # Rename year to year_treat
-    costs_df = costs_df.reset_index().rename(columns={"year": "year_treat"})
+    costs_df = costs_df.reset_index().rename(columns={"index": "year_treat"})
 
     costs_df = pd.melt(
         costs_df,
@@ -522,7 +553,17 @@ def calculate_benefits(
         id_vars="year_treat",
     )
 
+    # Transform the sim index to be 1-indexed.
+    # costs_df["sim"] = costs_df["sim"] + 1
+
     benefits = benefits.merge(
+        costs_df,
+        on=["sim", "year_treat"],
+        how="left",
+    )
+
+    # Add costs to simulation data
+    simulation_data = simulation_data.merge(
         costs_df,
         on=["sim", "year_treat"],
         how="left",

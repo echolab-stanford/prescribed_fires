@@ -9,4 +9,5 @@ roads: ${compute.raw}/os_roads_ca
 
 att_results: ${compute.local_data}/results/att_conifers_dnbr_inmediate_new.csv
 spillover_att_results: ${compute.local_data}/results/att_spillover_new.csv
-sims_save_path: ${compute.save_path}/simulations/policy_spill_large_new
+sims_save_path: ${compute.save_path}/simulations/policy_spill_large_new_new
+#sims_save_path: ${compute.local_data}/simulations/policy_spill_large_new

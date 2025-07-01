@@ -18,8 +18,8 @@ spillovers: true
 spillover_size: 1000
 template_years: [2000, 2021]
 
-dist_treat: 1000
-year_limit: 6
+dist_treat: 2000
+year_limit: null
 
 land_type_mapping:
 conifers: 2.0
