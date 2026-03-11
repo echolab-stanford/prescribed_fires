@@ -102,11 +102,13 @@ def prepare_template(template_path, years=[2000, 2023]):
     The function will create a cartesian product of time and space to create a
     template with all the pixels in the sample.
 
-    Args:
-        template_path (str): Path to the template raster
-        years (list): List with the first and last year of the sample: [start, end]
+    Parameters:
+    -----------
+        - template_path (str): Path to the template raster
+        - years (list): List with the first and last year of the sample: [start, end]
 
     Returns:
+    --------
         pd.DataFrame
     """
 

@@ -10,8 +10,9 @@ import pyfixest as pf
 import statsmodels.formula.api as smf
 import xarray as xr
 from joblib import Parallel, delayed
-from prescribed.utils import expand_grid, grouper, prepare_template
 from tqdm import tqdm
+
+from prescribed.utils import expand_grid, grouper, prepare_template
 
 
 def make_model(
@@ -75,7 +76,7 @@ def make_model(
                     fml=formula,
                     data=sample,
                     fixef_tol=1e-3,
-                    vcov={"CRV1": fes},
+                    # vcov={"CRV1": fes},
                     weights=weights,
                 )
             else:
@@ -136,7 +137,7 @@ def make_model(
                 fml=formula,
                 data=linked_data,
                 fixef_tol=1e-5,
-                vcov={"CRV1": fes},
+                # vcov={"CRV1": fes},
                 weights=weights,
             )
         else:
@@ -391,7 +392,6 @@ def calculate_benefits(
         d.sum_dnbr,
         coalesce(b.year_treat, 0) as year_treat,
         coalesce(b.sim, 0) as sim,
-        coalesce(b.sum_benefit_event, 0) as sum_benefit_event,
         coalesce(d.sum_dnbr - b.sum_benefit_event, d.sum_dnbr) as simulated_sum_dnbr
     from benefits_event_agg b
     INNER JOIN dnbr_event_agg d
@@ -427,8 +427,7 @@ def calculate_benefits(
     )
 
     # Create a cross join with the dnbr data to have all the combinations of
-    # events, years and simulations. This will allow us to have the counterfactual
-    # and the observed data together with all the simulation runs.
+    # events, years and simulations. This will allow us to have the counterfactual and the observed data together with all the simulation runs.
     dnbr_data_cross = dnbr_data.merge(df_sims, how="cross")
 
     # We need to make sure that we don't have any contamination. This should be
@@ -446,7 +445,7 @@ def calculate_benefits(
                 "year_treat",
                 "sim",
                 "simulated_sum_dnbr",
-                "sum_benefit_event",
+                # "sum_benefit_event",
             ]
         ],
         on=["event_id", "year", "year_treat", "sim"],
@@ -460,7 +459,7 @@ def calculate_benefits(
         simulated_sum_dnbr=lambda x: x.simulated_sum_dnbr.fillna(
             simulation_data.sum_dnbr
         ),
-        sum_benefit_event=lambda x: x.sum_benefit_event.fillna(0),
+        # sum_benefit_event=lambda x: x.sum_benefit_event.fillna(0),
     )
 
     # Translate severity benefits into emissions using the coefficients
@@ -552,9 +551,6 @@ def calculate_benefits(
         value_name="policy_cost",
         id_vars="year_treat",
     )
-
-    # Transform the sim index to be 1-indexed.
-    # costs_df["sim"] = costs_df["sim"] + 1
 
     benefits = benefits.merge(
         costs_df,

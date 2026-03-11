@@ -15,15 +15,8 @@ license = "MIT"
 extend-include = ["*.ipynb"]
 line-length = 80
 
-[tool.ruff.lint]
-extend-select = [
-  "UP",  # pyupgrade
-  "D",   # pydocstyle
-]
-
 [tool.ruff.lint.pydocstyle]
-convention = "google"
-max-doc-length = 80
+convention = "numpy"
 
 [tool.ruff.format]
 docstring-code-format = true

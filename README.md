@@ -1,6 +1,6 @@
 # The air pollution benefits of low-severity fire
 
-This repo has all the replication data for the low-intensity and severity project. In this project we estimate the effects of specific fire events on the future fire dynamics (i.e probability of future fire and severity, and the prevented emissions from fire treatments through a simulated experiment). To do this, we rely on _synthtetic control_ to build counterfactuals to our treated areas, defined as low-intensity wildfires. This repo contains code to execute data processing and estimation of the described effects in the paper. 
+This repo has all the replication data for the low-intensity and severity paper. In this project we estimate the effects of specific fire events on the future fire dynamics (i.e probability of future fire and severity, and the prevented emissions from fire treatments through a simulated experiment). To do this, we rely on _synthtetic control_ to build counterfactuals to our treated areas, defined as low-intensity wildfires. This repo contains code to execute data processing and estimation of the described effects in the paper. 
 
 ## Installation
 Make sure to install all the needed libraries in the `environment.yml` file. If using conda, you can use just run `conda [mamba] env create -f environment.yml`. If running the balancing code, you need to be sure to have PyTorch (> 2.0.0) installed. 

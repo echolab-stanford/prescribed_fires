@@ -82,6 +82,7 @@ def calculate_estimator(
     for focal_year in tqdm(
         focal_years, desc="Calculating estimator per focal year..."
     ):
+        print(f"Processing focal year: {focal_year}")
         # We want to calculate an ATT estimator per each focal year and lag,
         # these are  the next available years after the focal year in the
         # outcomes dataset (or in the treatments dataset if we are calculating
@@ -271,7 +272,7 @@ def calculate_estimator(
 
                 # Calculate the variance in the control group
                 weighted_outcomes = (
-                    outcomes_control.groupby("year")
+                    outcomes_control.groupby("year", as_index=False)
                     .apply(
                         lambda df: pd.Series(
                             calculate_weighted_stats(
@@ -286,6 +287,8 @@ def calculate_estimator(
                     )
                     .reset_index()
                 )
+                if "year" not in weighted_outcomes.columns:
+                    weighted_outcomes = weighted_outcomes.reset_index()
 
             elif outcomes == "rr":
                 # To build the RR estimator denominator we do not need an outcome
@@ -369,6 +372,11 @@ def calculate_estimator(
         # the selection of the outcome. If the `rr` option is in, then we will
         # not have the focal_year in the sample of years, thus we will have a
         # lag starting in 1, rather than zero.
+
+        if weighted_outcomes.empty:
+            print("No weighted outcomes available.")
+            continue
+
         estimator = treat_means_df.merge(weighted_outcomes, on="year")
 
         if not estimator.empty:
