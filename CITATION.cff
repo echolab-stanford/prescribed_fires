@@ -1,0 +1,49 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: The air pollution benefits of low severity fire
+message: >-
+  Replication code for the paper "The air pollution benefits
+  of low severity fire"
+type: software
+authors:
+  - given-names: Ivan
+    family-names: Higuera-Mendieta
+    email: ihigueme@stanford.edu
+    affiliation: Stanford University
+    orcid: 'https://orcid.org/0000-0002-3316-5798'
+  - given-names: Marshall
+    family-names: Burke
+    email: mburke@stanford.edu
+    affiliation: Stanford University
+    orcid: 'https://orcid.org/0000-0003-4288-5858'
+identifiers:
+  - type: doi
+    value: 10.31223/X52M9N
+    description: EarthArXiv
+repository-code: 'https://github.com/echolab-stanford/prescribed_fires'
+url: 'https://github.com/echolab-stanford/prescribed_fires'
+abstract: >-
+  Wildfires are reversing decades of air quality
+  improvements across much of the United States. Expanded
+  use of prescribed fire is a primary proposed solution, but
+  air quality trade-offs — more initial smoke for less smoke
+  later — remain poorly quantified. Using two decades of
+  satellite-derived measurements of fire severity and smoke
+  particulate matter across California, we assess the causal
+  effect of low-severity wildfire, a proxy for prescribed
+  burning, on subsequent wildfire activity and air quality.
+  Low-severity fire reduces the probability of very high
+  severity wildfire by 92%, with reductions lasting a decade
+  and extending 5 km from treated locations. Reduced future
+  smoke far outweighs the smoke produced during treatment,
+  with benefit-cost ratios exceeding six after a decade.
+  Sustained treatment of 500 thousand acres annually would
+  reduce cumulative smoke PM2.5 by roughly 10% after a
+  decade.
+keywords:
+  - remote sensing
+  - wildfires
+  - synthetic control
+license: MIT
