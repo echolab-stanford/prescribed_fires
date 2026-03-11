@@ -1,3 +1,9 @@
+
+
+[![DOI](https://zenodo.org/badge/766364986.svg)](https://doi.org/10.5281/zenodo.18968067)
+
+
+
 # The air pollution benefits of low-severity fire
 
 This repo has all the replication data for the low-intensity and severity paper. In this project we estimate the effects of specific fire events on the future fire dynamics (i.e probability of future fire and severity, and the prevented emissions from fire treatments through a simulated experiment). To do this, we rely on _synthtetic control_ to build counterfactuals to our treated areas, defined as low-intensity wildfires. This repo contains code to execute data processing and estimation of the described effects in the paper. 
